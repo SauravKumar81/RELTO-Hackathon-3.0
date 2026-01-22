@@ -15,6 +15,8 @@ export interface IItem extends Document {
   claimer?: Types.ObjectId;
   claimedAt?: Date;
   isResolved: boolean;
+  resolvedAt?: Date;
+  resolvedBy?: Types.ObjectId;
   expiresAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -75,6 +77,13 @@ const ItemSchema: Schema<IItem> = new Schema(
     isResolved: {
       type: Boolean,
       default: false,
+    },
+    resolvedAt: {
+      type: Date,
+    },
+    resolvedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
     },
     expiresAt: {
       type: Date,
