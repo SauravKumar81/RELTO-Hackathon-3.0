@@ -1,5 +1,4 @@
-# LocalLoop
-
+# RELTO
 A community-driven lost and found platform with an interactive map interface. Users can report found items, claim lost belongings, and earn rewards for helping reunite items with their owners.
 
 ## Features
