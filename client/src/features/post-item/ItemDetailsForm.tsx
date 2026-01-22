@@ -15,7 +15,7 @@ type FormData = {
 type Props = {
   type: 'lost' | 'found';
   onSubmit: (data: FormData) => void;
-  onBack: () => void;
+  onBack?: () => void;
 };
 
 const categories = [
@@ -34,7 +34,7 @@ const categories = [
   'general',
 ];
 
-export const ItemDetailsForm = ({ onSubmit, onBack }: Props) => {
+export const ItemDetailsForm = ({ type, onSubmit, onBack }: Props) => {
   const {
     register,
     handleSubmit,
@@ -58,13 +58,19 @@ export const ItemDetailsForm = ({ onSubmit, onBack }: Props) => {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <div className="mb-2">
+        <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded ${type === 'lost' ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'}`}>
+          Item Type: {type}
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
           Title *
         </label>
         <Input
           placeholder="e.g., Lost iPhone 13"
+          className="bg-black/20 border-white/10 focus:border-cyan-500/50"
           {...register('title', {
             required: 'Title is required',
             minLength: {
@@ -74,26 +80,28 @@ export const ItemDetailsForm = ({ onSubmit, onBack }: Props) => {
           })}
         />
         {errors.title && (
-          <p className="mt-1 text-xs text-red-600">{errors.title.message}</p>
+          <p className="text-xs text-red-400 ml-1">{errors.title.message}</p>
         )}
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
+      <div className="space-y-1.5">
+        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
           Description
         </label>
         <Textarea
           placeholder="Provide additional details about the item..."
           rows={4}
+          className="bg-black/20 border-white/10 focus:border-cyan-500/50"
           {...register('description')}
         />
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
+      <div className="space-y-1.5">
+        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
           Category *
         </label>
         <Select
+          className="bg-black/20 border-white/10 focus:border-cyan-500/50 text-white [&>option]:bg-gray-900"
           {...register('category', { required: 'Category is required' })}
         >
           <option value="">Select a category</option>
@@ -104,61 +112,62 @@ export const ItemDetailsForm = ({ onSubmit, onBack }: Props) => {
           ))}
         </Select>
         {errors.category && (
-          <p className="mt-1 text-xs text-red-600">{errors.category.message}</p>
+          <p className="text-xs text-red-400 ml-1">{errors.category.message}</p>
         )}
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
-          Expiration Date *
-        </label>
-        <Input
-          type="date"
-          min={getMinDate()}
-          max={getMaxDate()}
-          {...register('expiresAt', { required: 'Expiration date is required' })}
-        />
-        {errors.expiresAt && (
-          <p className="mt-1 text-xs text-red-600">
-            {errors.expiresAt.message}
-          </p>
-        )}
-      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
+            Expiration Date *
+            </label>
+            <Input
+            type="date"
+            min={getMinDate()}
+            max={getMaxDate()}
+            className="bg-black/20 border-white/10 focus:border-cyan-500/50 [color-scheme:dark]"
+            {...register('expiresAt', { required: 'Expiration date is required' })}
+            />
+            {errors.expiresAt && (
+            <p className="text-xs text-red-400 ml-1">
+                {errors.expiresAt.message}
+            </p>
+            )}
+        </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
-          Search Radius (meters)
-        </label>
-        <Input
-          type="number"
-          min="50"
-          max="5000"
-          step="50"
-          placeholder="200"
-          {...register('radius', {
-            valueAsNumber: true,
-            min: { value: 50, message: 'Minimum radius is 50 meters' },
-            max: { value: 5000, message: 'Maximum radius is 5000 meters' },
-          })}
-        />
-        {errors.radius && (
-          <p className="mt-1 text-xs text-red-600">{errors.radius.message}</p>
-        )}
-        <p className="mt-1 text-xs text-slate-500">
-          How far from the location should people search? (default: 200m)
-        </p>
+        <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
+            Search Radius (m)
+            </label>
+            <Input
+            type="number"
+            min="50"
+            max="5000"
+            step="50"
+            placeholder="200"
+            className="bg-black/20 border-white/10 focus:border-cyan-500/50"
+            {...register('radius', {
+                valueAsNumber: true,
+                min: { value: 50, message: 'Min 50m' },
+                max: { value: 5000, message: 'Max 5000m' },
+            })}
+            />
+            {errors.radius && (
+            <p className="text-xs text-red-400 ml-1">{errors.radius.message}</p>
+            )}
+        </div>
       </div>
-
-      <div className="flex gap-2">
-        <Button type="button" variant="ghost" onClick={onBack} className="flex-1">
-          Back
-        </Button>
-        <Button type="submit" className="flex-1">
-          Next: Select Location
+      
+      <div className="flex gap-3 pt-2">
+        {onBack && (
+          <Button type="button" variant="outline" onClick={onBack} className="flex-1">
+            Back
+          </Button>
+        )}
+        <Button type="submit" className={onBack ? "flex-1" : "w-full"}>
+          Next: Location
         </Button>
       </div>
     </form>
   );
 };
-
-
