@@ -137,7 +137,7 @@ export const CATEGORY_CONFIG: Record<ItemCategory, CategoryConfig> = {
   other: {
     icon: Package,
     label: 'Other',
-    color: '#64748b',
+    color: '#2a766bff',
     urgency: 'low',
   },
 };
