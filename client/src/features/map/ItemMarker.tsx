@@ -12,15 +12,18 @@ export const ItemMarker = ({ item }: { item: Item }) => {
   const categoryConfig = getCategoryConfig(item.category);
   const Icon = categoryConfig.icon;
   const isSelected = selectedItemId === item._id;
-  const isUrgent = categoryConfig.urgency === 'high';
+  const isLost = item.type === 'lost';
   
   const ownerId = typeof item.owner === 'string' ? item.owner : (item.owner?._id || null);
   const isOwnItem = currentUser && ownerId && ownerId === currentUser._id;
+
+  const markerColor = isLost ? '#ef4444' : '#22c55e';
 
   return (
     <Marker
       latitude={item.location.coordinates[1]}
       longitude={item.location.coordinates[0]}
+      anchor="bottom"
       onClick={(e) => {
         e.originalEvent.stopPropagation();
         selectItem(item._id);
@@ -30,43 +33,60 @@ export const ItemMarker = ({ item }: { item: Item }) => {
         className="relative cursor-pointer"
         animate={{
           scale: isSelected ? 1.2 : 1,
-          y: isSelected ? -5 : 0,
         }}
-        whileHover={{ scale: 1.15 }}
+        whileHover={{ scale: 1.1 }}
         transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+        style={{ filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.4))' }}
       >
-        {isUrgent && (
-          <div
-            className="absolute inset-0 rounded-full blur-md animate-pulse"
+        {isLost && (
+          <motion.div
+            className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full"
             style={{
-              backgroundColor: categoryConfig.color,
-              opacity: 0.4,
-              transform: 'scale(1.5)',
+              width: 40,
+              height: 40,
+              border: `3px solid ${markerColor}`,
+            }}
+            animate={{
+              scale: [1, 1.6],
+              opacity: [0.8, 0],
+            }}
+            transition={{
+              duration: 1.5,
+              repeat: Infinity,
+              ease: 'easeOut',
             }}
           />
         )}
 
-        <div
-          className={`relative flex h-10 w-10 items-center justify-center rounded-full shadow-lg border-2 ${
-            isOwnItem ? 'border-slate-400' : 'border-white'
-          }`}
-          style={{
-            backgroundColor: isOwnItem ? '#64748b' : categoryConfig.color,
-          }}
-        >
-          <Icon size={20} className="text-white" strokeWidth={2.5} />
-        </div>
+        <div className="relative">
+          <svg width="36" height="44" viewBox="0 0 36 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="18" cy="42" rx="6" ry="2" fill="rgba(0,0,0,0.25)" />
+            
+            <path
+              d="M18 0C8.059 0 0 8.059 0 18C0 28 18 44 18 44C18 44 36 28 36 18C36 8.059 27.941 0 18 0Z"
+              fill={isOwnItem ? '#475569' : markerColor}
+            />
+            
+            <circle cx="18" cy="16" r="11" fill="white" />
+          </svg>
+          
+          <div 
+            className="absolute top-[5px] left-1/2 -translate-x-1/2 w-[22px] h-[22px] flex items-center justify-center rounded-full"
+            style={{ backgroundColor: categoryConfig.color }}
+          >
+            <Icon size={12} className="text-white" strokeWidth={2.5} />
+          </div>
 
-        <div
-          className={`absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-bold ${
-            item.type === 'lost' ? 'bg-red-500' : 'bg-green-500'
-          }`}
-        >
-          <span className="text-white">{item.type === 'lost' ? 'L' : 'F'}</span>
+          <div
+            className={`absolute top-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
+              isLost ? 'bg-red-600' : 'bg-green-600'
+            }`}
+            title={isLost ? 'Lost' : 'Found'}
+          />
         </div>
         
         {isOwnItem && (
-          <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap bg-slate-700 text-white px-2 py-0.5 rounded text-[9px] font-medium shadow-sm opacity-80">
+          <div className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-slate-800 text-white px-1.5 py-0.5 rounded text-[8px] font-medium shadow">
             Your Post
           </div>
         )}
