@@ -10,15 +10,18 @@ const generateToken = (id: string) => {
 };
 
 export const registerUser = async (req: Request, res: Response) => {
-  const { name, email, password, phone } = req.body;
+  const { name, email, password } = req.body;
 
-  if (!name || !email || !password || !phone) {
-    return res.status(400).json({ message: 'All fields are required' });
+  if (!name || !email || !password) {
+    res.status(400);
+    throw new Error('Please add all fields');
   }
 
   const userExists = await User.findOne({ email });
+
   if (userExists) {
-    return res.status(400).json({ message: 'User already exists' });
+    res.status(400);
+    throw new Error('User already exists');
   }
 
   const salt = await bcrypt.genSalt(10);
@@ -28,21 +31,24 @@ export const registerUser = async (req: Request, res: Response) => {
     name,
     email,
     password: hashedPassword,
-    phone,
   });
 
-  res.status(201).json({
-    _id: user._id,
-    name: user.name,
-    email: user.email,
-    phone: user.phone,
-    points: user.points,
-    level: user.level,
-    itemsPosted: user.itemsPosted,
-    itemsClaimed: user.itemsClaimed,
-    itemsReturned: user.itemsReturned,
-    token: generateToken(user._id.toString()),
-  });
+  if (user) {
+    res.status(201).json({
+      _id: user.id,
+      name: user.name,
+      email: user.email,
+      points: user.points,
+      level: user.level,
+      itemsPosted: user.itemsPosted,
+      itemsClaimed: user.itemsClaimed,
+      itemsReturned: user.itemsReturned,
+      token: generateToken(user._id.toString()),
+    });
+  } else {
+    res.status(400);
+    throw new Error('Invalid user data');
+  }
 };
 
 export const loginUser = async (req: Request, res: Response) => {
@@ -68,7 +74,6 @@ export const loginUser = async (req: Request, res: Response) => {
     _id: user._id,
     name: user.name,
     email: user.email,
-    phone: user.phone,
     points: user.points,
     level: user.level,
     itemsPosted: user.itemsPosted,
