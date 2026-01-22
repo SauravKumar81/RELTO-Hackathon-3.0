@@ -17,7 +17,7 @@ export const createItem = async (req: Request, res: Response) => {
     expiresAt,
   } = req.body;
 
-  const typeValue = req.body.type?.toLowerCase() as 'lost' | 'found';
+  // const typeValue = req.body.type?.toLowerCase() as 'lost' | 'found';
 
   if (
     !title ||
@@ -59,7 +59,6 @@ export const createItem = async (req: Request, res: Response) => {
     expiresAt,
   });
 
-  // Award points for posting item
   const user = await User.findById((req as any).user.id);
   if (user) {
     user.points += POINTS.POST_ITEM;
@@ -68,8 +67,7 @@ export const createItem = async (req: Request, res: Response) => {
     await user.save();
   }
 
-  // Populate owner before sending response
-  await item.populate('owner', 'name email phone');
+  await item.populate('owner', 'name');
 
   res.status(201).json(item);
 };
@@ -80,8 +78,8 @@ export const getAllItems = async (req: Request, res: Response) => {
     const items = await Item.find({
       isResolved: false,
     })
-      .populate('owner', 'name email phone')
-      .populate('claimer', 'name email phone');
+      .populate('owner', 'name')
+      .populate('claimer', 'name');
 
     res.json(items);
   } catch (error) {
@@ -108,8 +106,8 @@ export const getNearbyItems = async (req: Request, res: Response) => {
       },
     },
   })
-    .populate('owner', 'name email phone')
-    .populate('claimer', 'name email phone');
+    .populate('owner', 'name')
+    .populate('claimer', 'name');
 
   res.status(200).json(items);
 };
@@ -117,14 +115,13 @@ export const getNearbyItems = async (req: Request, res: Response) => {
 export const getItemById = async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  // Validate ObjectId format
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ message: 'Invalid item ID format' });
   }
 
   const item = await Item.findById(id)
-    .populate('owner', 'name email phone')
-    .populate('claimer', 'name email phone');
+    .populate('owner', 'name')
+    .populate('claimer', 'name');
 
   if (!item) {
     return res.status(404).json({ message: 'Item not found' });
@@ -136,7 +133,6 @@ export const getItemById = async (req: Request, res: Response) => {
 export const resolveItem = async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  // Validate ObjectId format
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ message: 'Invalid item ID format' });
   }
@@ -156,6 +152,8 @@ export const resolveItem = async (req: Request, res: Response) => {
   }
 
   item.isResolved = true;
+  item.resolvedAt = new Date();
+  item.resolvedBy = userId;
   await item.save();
 
   const owner = await User.findById(item.owner);
@@ -178,15 +176,37 @@ export const resolveItem = async (req: Request, res: Response) => {
   res.status(200).json({ message: 'Item resolved' });
 };
 
-export const claimItem = async (req: Request, res: Response) => {
+export const deleteItem = async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  // Validate ObjectId format
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ message: 'Invalid item ID format' });
   }
 
-  const item = await Item.findById(id).populate('owner', 'name email phone').populate('claimer', 'name email phone');
+  const item = await Item.findById(id);
+
+  if (!item) {
+    return res.status(404).json({ message: 'Item not found' });
+  }
+
+  const userId = (req as any).user.id;
+  if (item.owner.toString() !== userId) {
+    return res.status(403).json({ message: 'Not authorized. Only the owner can delete this item.' });
+  }
+
+  await Item.findByIdAndDelete(id);
+
+  res.status(200).json({ message: 'Item deleted successfully' });
+};
+
+export const claimItem = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: 'Invalid item ID format' });
+  }
+
+  const item = await Item.findById(id).populate('owner', 'name').populate('claimer', 'name');
 
   if (!item) {
     return res.status(404).json({ message: 'Item not found' });
@@ -208,7 +228,6 @@ export const claimItem = async (req: Request, res: Response) => {
   item.claimedAt = new Date();
   await item.save();
 
-  // Award points for claiming item
   const claimer = await User.findById((req as any).user.id);
   if (claimer) {
     claimer.points += POINTS.CLAIM_ITEM;
@@ -217,8 +236,87 @@ export const claimItem = async (req: Request, res: Response) => {
     await claimer.save();
   }
 
-  // Populate claimer info for response
-  await item.populate('claimer', 'name email phone');
+  await item.populate('claimer', 'name');
+
+  res.status(200).json(item);
+};
+
+export const getHistory = async (req: Request, res: Response) => {
+  try {
+    const { 
+      search, 
+      category, 
+      type, 
+      page = 1, 
+      limit = 20,
+      sortBy = 'resolvedAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const query: any = { isResolved: true };
+
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    if (category) {
+      query.category = category;
+    }
+
+    if (type && ['lost', 'found'].includes(type as string)) {
+      query.type = type;
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const sort: any = {};
+    sort[sortBy as string] = sortOrder === 'asc' ? 1 : -1;
+
+    const items = await Item.find(query)
+      .populate('owner', 'name email')
+      .populate('claimer', 'name email')
+      .populate('resolvedBy', 'name')
+      .sort(sort)
+      .skip(skip)
+      .limit(Number(limit));
+
+    const total = await Item.countDocuments(query);
+
+    res.status(200).json({
+      items,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit)),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const getHistoryItem = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: 'Invalid item ID format' });
+  }
+
+  const item = await Item.findById(id)
+    .populate('owner', 'name email')
+    .populate('claimer', 'name email')
+    .populate('resolvedBy', 'name');
+
+  if (!item) {
+    return res.status(404).json({ message: 'Item not found' });
+  }
+
+  if (!item.isResolved) {
+    return res.status(400).json({ message: 'Item is not resolved yet' });
+  }
 
   res.status(200).json(item);
 };
