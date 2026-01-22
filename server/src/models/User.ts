@@ -1,13 +1,9 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-/**
- * User Document Interface
- */
 export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
-  phone: string;
   points: number;
   level: number;
   itemsPosted: number;
@@ -17,9 +13,6 @@ export interface IUser extends Document {
   updatedAt: Date;
 }
 
-/**
- * User Schema
- */
 const UserSchema: Schema<IUser> = new Schema(
   {
     name: {
@@ -39,12 +32,7 @@ const UserSchema: Schema<IUser> = new Schema(
       type: String,
       required: true,
       minlength: 6,
-      select: false, // IMPORTANT: do not return password by default
-    },
-    phone: {
-      type: String,
-      required: true,
-      trim: true,
+      select: false,
     },
     points: {
       type: Number,
@@ -73,13 +61,10 @@ const UserSchema: Schema<IUser> = new Schema(
     },
   },
   {
-    timestamps: true, // adds createdAt & updatedAt automatically
+    timestamps: true,
   }
 );
 
-/**
- * User Model
- */
 const User = mongoose.model<IUser>('User', UserSchema);
 
 export default User;
