@@ -33,3 +33,34 @@ export const claimItem = async (id: string) => {
   const { data } = await api.patch<Item>(`/api/items/${id}/claim`);
   return data;
 };
+
+export const deleteItem = async (id: string) => {
+  const { data } = await api.delete<{ message: string }>(`/api/items/${id}`);
+  return data;
+};
+
+export const getHistory = async (params?: {
+  search?: string;
+  category?: string;
+  type?: 'lost' | 'found';
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}) => {
+  const { data } = await api.get<{
+    items: Item[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
+  }>('/api/items/history', { params });
+  return data;
+};
+
+export const getHistoryItem = async (id: string) => {
+  const { data } = await api.get<Item>(`/api/items/history/${id}`);
+  return data;
+};
