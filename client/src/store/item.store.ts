@@ -9,6 +9,7 @@ import {
   createItem,
   resolveItem,
   claimItem,
+  deleteItem,
 } from '../services/item.service';
 
 type ItemState = {
@@ -20,6 +21,7 @@ type ItemState = {
   clearActiveItem: () => void;
   addItem: (formData: FormData) => Promise<void>;
   markResolved: (id: string) => Promise<void>;
+  deleteItem: (id: string) => Promise<void>;
   claimItem: (id: string) => Promise<void>;
 };
 
@@ -89,6 +91,14 @@ export const useItemStore = create<ItemState>((set) => ({
       toast.success(`+${POINTS.CONFIRM_RETURN} points! Both you and the finder earned bonus points!`);
     }
     
+    set((state) => ({
+      items: state.items.filter((i) => i._id !== id),
+      activeItem: null,
+    }));
+  },
+
+  deleteItem: async (id) => {
+    await deleteItem(id);
     set((state) => ({
       items: state.items.filter((i) => i._id !== id),
       activeItem: null,
