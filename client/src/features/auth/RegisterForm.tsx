@@ -23,6 +23,7 @@ export const RegisterForm = () => {
     setIsSubmitting(true);
     try {
       await registerUser(data.name, data.email, data.password);
+      toast.success('Registration successful!');
       navigate('/');
     } catch (error: any) {
       console.error('Register error:', error);
