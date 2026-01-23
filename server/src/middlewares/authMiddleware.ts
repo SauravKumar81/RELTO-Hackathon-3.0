@@ -32,7 +32,9 @@ export const protect = async (
       return res.status(401).json({ message: 'User not found' });
     }
 
-    (req as any).user = { id: user._id.toString() };
+    (req as any).user = {
+      id: user._id.toString(),
+    };
 
 
     next();

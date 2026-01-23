@@ -7,7 +7,7 @@ type AuthState = {
   token: string | null;
   loading: boolean;
   loginUser: (email: string, password: string) => Promise<void>;
-  registerUser: (name: string, email: string, password: string, phone: string) => Promise<void>;
+  registerUser: (name: string, email: string, password: string) => Promise<void>;
   fetchMe: () => Promise<void>;
   logout: () => void;
 };
@@ -19,22 +19,37 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   loginUser: async (email, password) => {
     set({ loading: true });
-    const data = await login(email, password);
-    localStorage.setItem('token', data.token);
-    set({ user: data, token: data.token, loading: false });
+    try {
+      const data = await login(email, password);
+      localStorage.setItem('token', data.token);
+      set({ user: data, token: data.token, loading: false });
+    } catch (error) {
+      set({ loading: false });
+      throw error;
+    }
   },
 
-  registerUser: async (name, email, password, phone) => {
+  registerUser: async (name, email, password) => {
     set({ loading: true });
-    const data = await register(name, email, password, phone);
-    localStorage.setItem('token', data.token);
-    set({ user: data, token: data.token, loading: false });
+    try {
+      const data = await register(name, email, password);
+      localStorage.setItem('token', data.token);
+      set({ user: data, token: data.token, loading: false });
+    } catch (error) {
+      set({ loading: false });
+      throw error;
+    }
   },
 
   fetchMe: async () => {
     if (!localStorage.getItem('token')) return;
-    const user = await getMe();
-    set({ user });
+    try {
+      const user = await getMe();
+      set({ user });
+    } catch (error) {
+      localStorage.removeItem('token');
+      set({ user: null, token: null });
+    }
   },
 
   logout: () => {

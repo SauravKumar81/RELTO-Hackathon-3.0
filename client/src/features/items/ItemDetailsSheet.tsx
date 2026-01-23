@@ -4,26 +4,35 @@ import { Button } from '../../components/ui/Button';
 import { useItemStore } from '../../store/item.store';
 import { useMapStore } from '../../store/map.store';
 import { useAuthStore } from '../../store/auth.store';
+import { useChatStore } from '../../store/chat.store';
 import { getCategoryConfig } from '../../types/categories';
 import { formatDistanceToNow } from '../../utils/dateUtils';
-import { calculateDistance } from '../../utils/locationUtils';
-import { MapPin, Clock, User, Calendar, Flame, Mail, CheckCircle, Phone, MessageCircle, Check } from 'lucide-react';
+import { Clock, User, Calendar, Flame, CheckCircle, MessageCircle, Check, MessageSquare } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { StartChatModal } from '../chat/StartChatModal';
+import { ChatSheet } from '../chat/ChatSheet';
 
 export const ItemDetailsSheet = () => {
   const item = useItemStore((s) => s.activeItem);
   const fetchItem = useItemStore((s) => s.fetchItem);
   const clearActiveItem = useItemStore((s) => s.clearActiveItem);
   const resolve = useItemStore((s) => s.markResolved);
-  const claim = useItemStore((s) => s.claimItem);
   const loading = useItemStore((s) => s.loading);
   const selectedItemId = useMapStore((s) => s.selectedItemId);
   const animationComplete = useMapStore((s) => s.animationComplete);
   const selectItem = useMapStore((s) => s.selectItem);
-  const latitude = useMapStore((s) => s.latitude);
-  const longitude = useMapStore((s) => s.longitude);
   const currentUser = useAuthStore((s) => s.user);
-  const [claiming, setClaiming] = useState(false);
+  
+  const startConversation = useChatStore((s) => s.startConversation);
+  const conversations = useChatStore((s) => s.conversations);
+  const fetchConversationsForItem = useChatStore((s) => s.fetchConversationsForItem);
+  const activeConversation = useChatStore((s) => s.activeConversation);
+  const fetchConversation = useChatStore((s) => s.fetchConversation);
+  const clearActiveConversation = useChatStore((s) => s.clearActiveConversation);
+  
+  const [showStartChatModal, setShowStartChatModal] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [startingChat, setStartingChat] = useState(false);
 
   useEffect(() => {
     if (selectedItemId) {
@@ -33,21 +42,18 @@ export const ItemDetailsSheet = () => {
     }
   }, [selectedItemId, fetchItem, clearActiveItem]);
 
+  useEffect(() => {
+    if (item && currentUser && item.owner._id === currentUser._id) {
+      fetchConversationsForItem(item._id);
+    }
+  }, [item, currentUser, fetchConversationsForItem]);
+
   if (!item) return null;
 
   const categoryConfig = getCategoryConfig(item.category);
   const Icon = categoryConfig.icon;
   const isUrgent = categoryConfig.urgency === 'high';
   const timeAgo = formatDistanceToNow(item.createdAt);
-  
-  const distance = latitude && longitude
-    ? calculateDistance(
-        latitude,
-        longitude,
-        item.location.coordinates[1],
-        item.location.coordinates[0]
-      )
-    : null;
 
   const handleClose = () => {
     selectItem(null);
@@ -63,20 +69,41 @@ export const ItemDetailsSheet = () => {
     }
   };
 
-  const handleClaim = async () => {
-    setClaiming(true);
+  const handleStartChat = async (initialMessage: string) => {
+    setStartingChat(true);
     try {
-      await claim(item._id);
-      toast.success('✅ Claim submitted! The owner can now see your contact info.');
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to claim item');
+      const conversation = await startConversation(item._id, initialMessage);
+      setShowStartChatModal(false);
+      await fetchConversation(conversation._id);
+      setShowChat(true);
+    } catch {
     } finally {
-      setClaiming(false);
+      setStartingChat(false);
+    }
+  };
+
+  const handleOpenChat = async (conversationId: string) => {
+    await fetchConversation(conversationId);
+    setShowChat(true);
+  };
+
+  const handleCloseChat = () => {
+    setShowChat(false);
+    clearActiveConversation();
+    if (item && currentUser && item.owner._id === currentUser._id) {
+      fetchConversationsForItem(item._id);
     }
   };
 
   const isOwner = currentUser && item.owner?._id === currentUser._id;
-  const isClaimer = currentUser && item.claimer?._id === currentUser._id;
+  
+  const existingConversation = conversations.find(
+    (c) => c.item._id === item._id && c.claimant._id === currentUser?._id && c.status === 'active'
+  );
+  
+  const itemConversations = conversations.filter(
+    (c) => c.item._id === item._id && c.status === 'active'
+  );
 
   return (
     <Sheet open={animationComplete && !!item}>
@@ -129,14 +156,6 @@ export const ItemDetailsSheet = () => {
         </div>
 
         <div className="space-y-2 rounded-lg bg-slate-50 p-3">
-          {distance !== null && (
-            <div className="flex items-center gap-2 text-sm text-slate-600">
-              <MapPin size={16} className="text-slate-400" />
-              <span>
-                {distance < 1 ? `${Math.round(distance * 1000)}m` : `${distance.toFixed(1)}km`} away from you
-              </span>
-            </div>
-          )}
           <div className="flex items-center gap-2 text-sm text-slate-600">
             <Clock size={16} className="text-slate-400" />
             <span>Posted {timeAgo}</span>
@@ -157,77 +176,88 @@ export const ItemDetailsSheet = () => {
               <CheckCircle size={24} className="text-green-600 shrink-0 mt-0.5" />
               <div className="flex-1">
                 <h3 className="font-semibold text-green-900 mb-1">
-                  {isOwner ? 'Someone Found Your Item!' : isClaimer ? 'You Claimed This' : 'Already Claimed'}
+                  Item Claimed
                 </h3>
                 <p className="text-sm text-green-700 mb-2">
-                  {isOwner 
-                    ? `${item.claimer.name} found this item and posted it. Contact them to arrange pickup.` 
-                    : isClaimer
-                    ? 'You claimed this item. The finder can see your contact details and will help you get it back.'
-                    : 'This item has been claimed by its owner.'}
+                  This item has been claimed and is pending resolution.
                 </p>
-                {isOwner && (
-                  <div className="mt-3 space-y-2">
-                    <div className="flex items-center gap-2 text-sm">
-                      <User size={14} className="text-green-600" />
-                      <span className="font-medium text-green-900">{item.claimer.name}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isOwner && itemConversations.length > 0 && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <MessageSquare size={20} className="text-blue-600" />
+              <h3 className="font-semibold text-blue-900">
+                {itemConversations.length} Active Conversation{itemConversations.length > 1 ? 's' : ''}
+              </h3>
+            </div>
+            <div className="space-y-2">
+              {itemConversations.map((conv) => (
+                <button
+                  key={conv._id}
+                  onClick={() => handleOpenChat(conv._id)}
+                  className="w-full flex items-center justify-between p-3 bg-white rounded-lg hover:bg-blue-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-blue-200 flex items-center justify-center">
+                      <User size={16} className="text-blue-600" />
                     </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Mail size={14} className="text-green-600" />
-                      <a href={`mailto:${item.claimer.email}`} className="text-green-700 hover:underline">
-                        {item.claimer.email}
-                      </a>
-                    </div>
-                    {item.claimer.phone && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Phone size={14} className="text-green-600" />
-                        <span className="font-medium text-green-900">{item.claimer.phone}</span>
-                      </div>
-                    )}
-                    {item.claimer.phone && (
-                      <div className="flex gap-2 mt-3">
-                        <a
-                          href={`tel:${item.claimer.phone}`}
-                          className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-                        >
-                          <Phone size={16} />
-                          <span>Call</span>
-                        </a>
-                        <a
-                          href={`https://wa.me/${item.claimer.phone.replace(/\D/g, '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-                        >
-                          <MessageCircle size={16} />
-                          <span>WhatsApp</span>
-                        </a>
-                      </div>
-                    )}
+                    <span className="font-medium text-slate-900">{conv.claimant.name}</span>
                   </div>
-                )}
+                  {(conv.unreadCount || 0) > 0 && (
+                    <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
+                      {conv.unreadCount} new
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!isOwner && existingConversation && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+            <div className="flex items-start gap-3">
+              <MessageCircle size={24} className="text-blue-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-blue-900 mb-1">
+                  Conversation Active
+                </h3>
+                <p className="text-sm text-blue-700 mb-3">
+                  You have an ongoing conversation about this item.
+                </p>
+                <Button
+                  onClick={() => handleOpenChat(existingConversation._id)}
+                  className="w-full bg-blue-600 hover:bg-blue-700 flex items-center justify-center gap-2"
+                >
+                  <MessageCircle size={16} />
+                  Open Chat
+                  {(existingConversation.unreadCount || 0) > 0 && (
+                    <span className="bg-white text-blue-600 text-xs px-2 py-0.5 rounded-full ml-1">
+                      {existingConversation.unreadCount}
+                    </span>
+                  )}
+                </Button>
               </div>
             </div>
           </div>
         )}
 
         <div className="space-y-2">
-          {!item.claimer && !isOwner && item.type === 'found' && (
+          {!isOwner && !existingConversation && !item.isResolved && (
             <Button
-              onClick={handleClaim}
+              onClick={() => setShowStartChatModal(true)}
               className="w-full bg-blue-600 hover:bg-blue-700 flex items-center justify-center gap-2"
-              disabled={claiming || item.isResolved}
             >
-              {claiming ? 'Claiming...' : (
-                <>
-                  <CheckCircle size={16} />
-                  This is Mine - Claim It
-                </>
-              )}
+              <MessageCircle size={16} />
+              {item.type === 'found' ? "This is Mine" : "I Found This"}
             </Button>
           )}
 
-          {isOwner && item.claimer && !item.isResolved && (
+          {isOwner && itemConversations.length > 0 && !item.isResolved && (
             <Button
               onClick={handleResolve}
               className="w-full bg-green-600 hover:bg-green-700 flex items-center justify-center gap-2"
@@ -236,22 +266,7 @@ export const ItemDetailsSheet = () => {
               {loading ? 'Confirming...' : (
                 <>
                   <Check size={16} />
-                  Confirm Item Returned
-                </>
-              )}
-            </Button>
-          )}
-
-          {isClaimer && item.claimer && !item.isResolved && (
-            <Button
-              onClick={handleResolve}
-              className="w-full bg-green-600 hover:bg-green-700 flex items-center justify-center gap-2"
-              disabled={loading}
-            >
-              {loading ? 'Confirming...' : (
-                <>
-                  <Check size={16} />
-                  Confirm Item Received
+                  Mark as Resolved
                 </>
               )}
             </Button>
@@ -274,6 +289,21 @@ export const ItemDetailsSheet = () => {
             Close
           </Button>
         </div>
+
+        <StartChatModal
+          open={showStartChatModal}
+          onClose={() => setShowStartChatModal(false)}
+          onSubmit={handleStartChat}
+          itemTitle={item.title}
+          itemType={item.type}
+          loading={startingChat}
+        />
+
+        <ChatSheet
+          open={showChat}
+          conversation={activeConversation}
+          onClose={handleCloseChat}
+        />
       </div>
     </Sheet>
   );

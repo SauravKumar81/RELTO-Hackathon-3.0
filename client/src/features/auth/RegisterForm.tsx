@@ -10,7 +10,6 @@ type FormData = {
   name: string;
   email: string;
   password: string;
-  phone: string;
 };
 
 export const RegisterForm = () => {
@@ -23,7 +22,7 @@ export const RegisterForm = () => {
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
-      await registerUser(data.name, data.email, data.password, data.phone);
+      await registerUser(data.name, data.email, data.password);
       navigate('/');
     } catch (error: any) {
       console.error('Register error:', error);
@@ -37,11 +36,6 @@ export const RegisterForm = () => {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <Input placeholder="Name" {...register('name', { required: true })} />
       <Input placeholder="Email" {...register('email', { required: true })} />
-      <Input 
-        placeholder="Phone Number" 
-        {...register('phone', { required: true })} 
-        type="tel"
-      />
       <Input
         type="password"
         placeholder="Password"

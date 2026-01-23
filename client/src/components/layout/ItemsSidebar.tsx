@@ -1,94 +1,189 @@
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useItemStore } from '../../store/item.store';
 import { useMapStore } from '../../store/map.store';
 import { useAuthStore } from '../../store/auth.store';
+import { useChatStore } from '../../store/chat.store';
+import type { Item } from '../../types/item';
 import { getCategoryConfig } from '../../types/categories';
 import { formatDistanceToNow } from '../../utils/dateUtils';
-import { calculateDistance } from '../../utils/locationUtils';
-import { X, MapPin, Clock, User, Mail, Phone, CheckCircle, MessageCircle } from 'lucide-react';
+import { Clock, User, CheckCircle, MessageCircle, Trash2, ChevronLeft, AlertTriangle } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { Modal } from '../ui/Modal';
+import { StartChatModal } from '../../features/chat/StartChatModal';
+import { ChatSheet } from '../../features/chat/ChatSheet';
 import toast from 'react-hot-toast';
 
-export const ItemsSidebar = ({ searchQuery }: { searchQuery: string }) => {
+interface ItemsSidebarProps {
+  searchQuery: string;
+  isMobile?: boolean;
+  onClose?: () => void;
+}
+
+export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSidebarProps) => {
   const allItems = useItemStore((s) => s.items);
   
-  const items = allItems.filter(item => {
+  const items = allItems.filter((item: Item) => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     const categoryConfig = getCategoryConfig(item.category);
     return (
+      item.title?.toLowerCase().includes(query) ||
       item.description?.toLowerCase().includes(query) ||
       categoryConfig.label.toLowerCase().includes(query) ||
       item.type.toLowerCase().includes(query)
     );
   });
-  const selectedItemId = useMapStore((s) => s.selectedItemId);
-  const selectItem = useMapStore((s) => s.selectItem);
-  const latitude = useMapStore((s) => s.latitude);
-  const longitude = useMapStore((s) => s.longitude);
+  const { selectedItemId, selectItem } = useMapStore();
   const currentUser = useAuthStore((s) => s.user);
-  const resolve = useItemStore((s) => s.markResolved);
-  const claim = useItemStore((s) => s.claimItem);
+  const resolveItem = useItemStore((s) => s.markResolved);
+  const deleteItem = useItemStore((s) => s.deleteItem);
+  
+  const startConversation = useChatStore((s) => s.startConversation);
+  const conversations = useChatStore((s) => s.conversations);
+  const fetchConversationsForItem = useChatStore((s) => s.fetchConversationsForItem);
+  const activeConversation = useChatStore((s) => s.activeConversation);
+  const fetchConversation = useChatStore((s) => s.fetchConversation);
+  const clearActiveConversation = useChatStore((s) => s.clearActiveConversation);
+  
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [showStartChatModal, setShowStartChatModal] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [startingChat, setStartingChat] = useState(false);
+  
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; itemId: string | null }>({
+    isOpen: false,
+    itemId: null,
+  });
 
-  const userLocation = latitude && longitude ? { latitude, longitude } : null;
-
-  const selectedItem = items.find(item => item._id === selectedItemId);
-
-  const handleClaim = async (itemId: string) => {
-    try {
-      await claim(itemId);
-      toast.success('Item claimed successfully!');
-      console.log('Item claimed, store should update automatically');
-    } catch (error) {
-      console.error('Claim error:', error);
-      toast.error('Failed to claim item');
+  useEffect(() => {
+    if (selectedItemId) {
+      const item = allItems.find((i: Item) => i._id === selectedItemId);
+      if (item) {
+        setSelectedItem(item);
+      }
+    } else {
+      setSelectedItem(null);
     }
+  }, [selectedItemId, allItems]);
+
+  const handleStartChatClick = (item: Item) => {
+    if (!currentUser) {
+        toast.error('Please login to continue');
+        return;
+    }
+    setSelectedItem(item);
+    setShowStartChatModal(true);
+  };
+
+  const handleStartChatSubmit = async (initialMessage: string) => {
+    if (!selectedItem) return;
+    setStartingChat(true);
+    try {
+      const conversation = await startConversation(selectedItem._id, initialMessage);
+      setShowStartChatModal(false);
+      await fetchConversation(conversation._id);
+      setShowChat(true);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to start conversation');
+    } finally {
+      setStartingChat(false);
+    }
+  };
+
+  const handleOpenChat = async (conversationId: string) => {
+    try {
+      await fetchConversation(conversationId);
+      setShowChat(true);
+    } catch (error: any) {
+      toast.error('Failed to open chat');
+    }
+  };
+
+  const handleCloseChat = () => {
+    setShowChat(false);
+    clearActiveConversation();
   };
 
   const handleResolve = async (itemId: string) => {
     try {
-      await resolve(itemId);
-      toast.success('Item marked as resolved!');
+      await resolveItem(itemId);
+      toast.success('Item marked as resolved! 🎉');
       selectItem(null);
-    } catch (error) {
-      toast.error('Failed to resolve item');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to resolve item');
+    }
+  };
+
+  const handleDeleteRequest = (itemId: string) => {
+      setDeleteConfirmation({ isOpen: true, itemId });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmation.itemId) return;
+    
+    try {
+      await deleteItem(deleteConfirmation.itemId);
+      toast.success('Post deleted successfully');
+      selectItem(null);
+      setDeleteConfirmation({ isOpen: false, itemId: null });
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to delete post');
+    }
+  };
+
+  const handleItemSelect = (itemId: string) => {
+    selectItem(itemId);
+    if (isMobile && onClose) {
+      onClose();
     }
   };
 
   return (
-    <div className="w-72 bg-white shadow-xl flex flex-col border-r border-slate-200">
-      <div className="p-5 border-b border-slate-200">
-        <h2 className="text-xl font-bold text-slate-900">
+    <div className={`${isMobile ? 'w-full h-full' : 'w-80 h-[96vh] my-[2vh] ml-[2vh]'} glass-panel chamfered-box flex flex-col transition-all duration-300 z-40 relative shadow-[0_0_50px_rgba(0,0,0,0.5)]`}>
+      <div className={`${isMobile ? 'px-4 py-3' : 'px-6 py-6'} border-b border-white/10`}>
+        {!isMobile && (
+            <div className="mb-6 flex items-center gap-3">
+                 <img src="/favicon.png" alt="Relto Logo" className="h-10 w-10 object-contain rounded-lg shadow-lg border border-white/10" />
+                 <span className="text-2xl font-bold tracking-tight text-cyan-400">RELTO</span>
+            </div>
+        )}
+        <h2 className={`${isMobile ? 'text-lg' : 'text-xl'} font-bold text-white text-glow tracking-tight`}>
           Nearby Items
         </h2>
-        <p className="text-sm text-slate-600 mt-1">{items.length} items found</p>
+        <p className="text-sm text-gray-400 mt-1 font-light tracking-wide">{items.length} items found</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className={`flex-1 overflow-y-auto overflow-x-hidden hide-scrollbar ${isMobile ? 'max-h-[50vh]' : ''} p-2`}>
         <AnimatePresence mode="wait">
           {selectedItem ? (
             <motion.div
               key="details"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="p-4"
+              initial={{ opacity: 0, x: -20, filter: 'blur(10px)' }}
+              animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, x: -20, filter: 'blur(10px)' }}
+              transition={{ duration: 0.3, ease: "circOut" }}
+              className={`${isMobile ? 'p-3' : 'p-4'}`}
             >
               <button
                 onClick={() => selectItem(null)}
-                className="mb-4 flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900"
+                className="mb-4 flex items-center gap-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
               >
-                <X size={16} />
-                Back to list
+                <ChevronLeft size={16} />
+                <span className="font-medium">Back to list</span>
               </button>
 
               <ItemDetails
                 key={selectedItem._id}
                 item={selectedItem}
-                userLocation={userLocation}
                 currentUser={currentUser}
-                onClaim={handleClaim}
+                onStartChat={handleStartChatClick}
+                onOpenChat={handleOpenChat}
                 onResolve={handleResolve}
+                onDelete={handleDeleteRequest}
+                conversations={conversations}
+                fetchConversationsForItem={fetchConversationsForItem}
+                isMobile={isMobile}
               />
             </motion.div>
           ) : (
@@ -97,303 +192,264 @@ export const ItemsSidebar = ({ searchQuery }: { searchQuery: string }) => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="divide-y divide-slate-100"
+              className="space-y-2"
             >
-              {items.map((item) => (
-                <ItemCard
-                  key={item._id}
-                  item={item}
-                  userLocation={userLocation}
-                  onClick={() => selectItem(item._id)}
-                />
-              ))}
+              {items.length === 0 ? (
+                <div className="p-6 text-center text-gray-500">
+                  <p>No items nearby</p>
+                  <p className="text-sm mt-1">Try zooming out or moving the map</p>
+                </div>
+              ) : (
+                items.map((item) => (
+                  <ItemCard
+                    key={item._id}
+                    item={item}
+                    onClick={() => handleItemSelect(item._id)}
+                    isMobile={isMobile}
+                  />
+                ))
+              )}
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      <StartChatModal
+        open={showStartChatModal}
+        onClose={() => setShowStartChatModal(false)}
+        onSubmit={handleStartChatSubmit}
+        itemTitle={selectedItem?.title || ''}
+        itemType={selectedItem?.type || 'found'}
+      />
+
+      <ChatSheet
+        open={showChat}
+        conversation={activeConversation}
+        onClose={handleCloseChat}
+      />
+
+      <Modal 
+        open={deleteConfirmation.isOpen} 
+        onClose={() => setDeleteConfirmation({ isOpen: false, itemId: null })}
+      >
+        <div className="text-center p-2">
+            <div className="mx-auto w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4 border border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+                <AlertTriangle size={24} className="text-red-500" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">Delete Post?</h3>
+            <p className="text-gray-400 text-sm mb-6">
+                Are you sure you want to delete this post? This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+                <Button 
+                    variant="ghost" 
+                    onClick={() => setDeleteConfirmation({ isOpen: false, itemId: null })}
+                    className="flex-1 hover:bg-white/5 text-gray-300"
+                >
+                    Cancel
+                </Button>
+                <Button 
+                    onClick={confirmDelete}
+                    className="flex-1 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white shadow-lg shadow-red-900/40 border-0"
+                >
+                    Delete
+                </Button>
+            </div>
+        </div>
+      </Modal>
+
     </div>
   );
 };
 
-const ItemCard = ({ item, userLocation, onClick }: any) => {
+const ItemCard = ({ item, onClick, isMobile = false }: { item: Item, onClick: () => void, isMobile?: boolean }) => {
   const categoryConfig = getCategoryConfig(item.category);
   const Icon = categoryConfig.icon;
   const timeAgo = formatDistanceToNow(item.createdAt);
-  
-  const distance = userLocation
-    ? calculateDistance(
-        userLocation.latitude,
-        userLocation.longitude,
-        item.location.coordinates[1],
-        item.location.coordinates[0]
-      )
-    : null;
 
   return (
-    <button
+    <motion.button
+      layoutId={item._id}
+      whileHover={{ scale: 1.02, x: 4 }}
+      whileTap={{ scale: 0.98 }}
       onClick={onClick}
-      className="w-full p-4 text-left hover:bg-slate-50 transition-colors"
+      className={`w-full ${isMobile ? 'p-3' : 'p-4'} text-left bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 transition-all rounded-lg group relative overflow-hidden`}
     >
-      <div className="flex items-start gap-3">
+      <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 via-cyan-500/0 to-cyan-500/0 group-hover:via-cyan-500/5 transition-all duration-500" />
+      
+      <div className="flex items-start gap-4 relative z-10">
         <div
-          className="flex h-10 w-10 items-center justify-center rounded-full flex-shrink-0"
-          style={{ backgroundColor: `${categoryConfig.color}20` }}
+          className={`flex ${isMobile ? 'h-9 w-9' : 'h-10 w-10'} items-center justify-center rounded-lg shadow-lg flex-shrink-0 backdrop-blur-sm`}
+          style={{ backgroundColor: `${categoryConfig.color}20`, boxShadow: `0 0 10px ${categoryConfig.color}20` }}
         >
-          <Icon size={20} style={{ color: categoryConfig.color }} />
+          <Icon size={isMobile ? 18 : 20} style={{ color: categoryConfig.color, filter: 'drop-shadow(0 0 2px rgba(255,255,255,0.3))' }} />
         </div>
         
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-semibold text-slate-900 text-sm">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className={`font-bold text-gray-100 ${isMobile ? 'text-sm' : 'text-sm'} group-hover:text-cyan-200 transition-colors`}>
               {categoryConfig.label}
             </span>
             <span
-              className={`text-xs px-2 py-0.5 rounded-full ${
+              className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-sm ${
                 item.type === 'lost'
-                  ? 'bg-red-100 text-red-700'
-                  : 'bg-green-100 text-green-700'
+                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  : 'bg-green-500/10 text-green-400 border border-green-500/20'
               }`}
             >
               {item.type === 'lost' ? 'Lost' : 'Found'}
             </span>
           </div>
           
-          <p className="text-sm text-slate-600 line-clamp-2 mb-2">
+          <p className={`${isMobile ? 'text-xs' : 'text-sm'} text-gray-400 line-clamp-2 mb-2 font-light`}>
             {item.description}
           </p>
           
-          <div className="flex items-center gap-3 text-xs text-slate-500">
-            {distance !== null && (
-              <span className="flex items-center gap-1">
-                <MapPin size={12} />
-                {distance < 1 ? `${Math.round(distance * 1000)}m` : `${distance.toFixed(1)}km`}
-              </span>
-            )}
+          <div className="flex items-center gap-3 text-xs text-gray-500">
             <span className="flex items-center gap-1">
-              <Clock size={12} />
+              <Clock size={12} className="text-cyan-700" />
               {timeAgo}
             </span>
           </div>
         </div>
       </div>
-    </button>
+    </motion.button>
   );
 };
 
-const ItemDetails = ({ item, userLocation, currentUser, onClaim, onResolve }: any) => {
+const ItemDetails = ({ item, currentUser, onStartChat, onOpenChat, onResolve, onDelete, conversations, fetchConversationsForItem }: any) => {
   const categoryConfig = getCategoryConfig(item.category);
   const Icon = categoryConfig.icon;
-  const timeAgo = formatDistanceToNow(item.createdAt);
-  
-  const distance = userLocation
-    ? calculateDistance(
-        userLocation.latitude,
-        userLocation.longitude,
-        item.location.coordinates[1],
-        item.location.coordinates[0]
-      )
-    : null;
-
   const isOwner = currentUser && item.owner?._id === currentUser._id;
-  const isClaimer = currentUser && item.claimer?._id === currentUser._id;
+  const itemConversations = conversations.filter((c: any) => c.item?._id === item._id);
+  const userConversation = itemConversations.find((c: any) => c.claimant?._id === currentUser?._id || c.poster?._id === currentUser?._id);
 
-  console.log('ItemDetails render:', {
-    hasClaimer: !!item.claimer,
-    isOwner,
-    isClaimer,
-    isResolved: item.isResolved,
-    itemType: item.type,
-    claimerData: item.claimer
-  });
+  useEffect(() => {
+    if (isOwner) {
+      fetchConversationsForItem(item._id);
+    }
+  }, [item._id, isOwner, fetchConversationsForItem]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
+    <div className="space-y-6">
+      <div className="flex items-start gap-4">
         <div
-          className="flex h-12 w-12 items-center justify-center rounded-full"
-          style={{ backgroundColor: `${categoryConfig.color}20` }}
+          className="h-16 w-16 flex items-center justify-center rounded-2xl shadow-xl flex-shrink-0"
+          style={{ backgroundColor: `${categoryConfig.color}20`, border: `1px solid ${categoryConfig.color}40` }}
         >
-          <Icon size={24} style={{ color: categoryConfig.color }} />
+          <Icon size={32} style={{ color: categoryConfig.color }} />
         </div>
         <div>
-          <h3 className="font-semibold text-slate-900">{categoryConfig.label}</h3>
-          <span
-            className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-              item.type === 'lost'
-                ? 'bg-red-100 text-red-700'
-                : 'bg-green-100 text-green-700'
-            }`}
-          >
-            {item.type === 'lost' ? 'Lost' : 'Found'}
-          </span>
+          <h3 className="text-xl font-bold text-white mb-1">{item.title || categoryConfig.label}</h3>
+          <div className="flex items-center gap-2">
+            <span className={`text-[10px] uppercase tracking-widest font-black px-2 py-0.5 rounded ${item.type === 'lost' ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
+              {item.type === 'lost' ? 'Lost' : 'Found'}
+            </span>
+            <span className="text-xs text-gray-500">in {categoryConfig.label}</span>
+          </div>
         </div>
       </div>
 
       {item.imageUrl && (
-        <img
-          src={item.imageUrl}
-          alt={categoryConfig.label}
-          className="w-full h-48 object-cover rounded-lg"
-        />
+        <div className="relative group">
+           <div className="absolute inset-0 bg-cyan-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+           <img src={item.imageUrl} alt={item.title} className="w-full h-48 object-cover rounded-xl border border-white/10 relative z-10" />
+        </div>
       )}
 
-      <div>
-        <h4 className="text-sm font-semibold text-slate-700 mb-1">Description</h4>
-        <p className="text-sm text-slate-600">{item.description}</p>
+      <div className="space-y-4">
+        <div>
+          <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Description</h4>
+          <p className="text-sm text-gray-300 leading-relaxed font-light">{item.description}</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="glass-panel p-3 rounded-xl bg-white/5 border-white/5">
+             <div className="flex items-center gap-2 mb-1">
+                <User size={14} className="text-cyan-400" />
+                <span className="text-[10px] font-bold text-gray-500 uppercase">Posted By</span>
+             </div>
+             <p className="text-xs font-medium text-white">{isOwner ? 'You' : item.owner?.name}</p>
+          </div>
+          <div className="glass-panel p-3 rounded-xl bg-white/5 border-white/5">
+             <div className="flex items-center gap-2 mb-1">
+                <Clock size={14} className="text-cyan-400" />
+                <span className="text-[10px] font-bold text-gray-500 uppercase">Date</span>
+             </div>
+             <p className="text-xs font-medium text-white">{formatDistanceToNow(item.createdAt)} ago</p>
+          </div>
+        </div>
       </div>
 
-      <div className="space-y-2 text-sm">
-        {distance !== null && (
-          <div className="flex items-center gap-2 text-slate-600">
-            <MapPin size={16} className="text-blue-500" />
-            <span>
-              {distance < 1 ? `${Math.round(distance * 1000)} meters` : `${distance.toFixed(1)} km`} away
-            </span>
-          </div>
+      <div className="pt-4 border-t border-white/10 space-y-3">
+        {isOwner ? (
+          <>
+            <Button
+              className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 border-0 shadow-lg shadow-cyan-900/20 h-11"
+              onClick={() => onResolve(item._id)}
+            >
+              <CheckCircle size={18} className="mr-2" />
+              Mark as Resolved
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full text-red-400 hover:text-red-300 hover:bg-red-500/10 h-11"
+              onClick={() => onDelete(item._id)}
+            >
+              <Trash2 size={18} className="mr-2" />
+              Delete Post
+            </Button>
+
+            {itemConversations.length > 0 && (
+              <div className="mt-6 space-y-3">
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                  <MessageCircle size={14} className="text-cyan-400" />
+                  Active Inquiries ({itemConversations.length})
+                </h4>
+                {itemConversations.map((conv: any) => (
+                  <button
+                    key={conv._id}
+                    onClick={() => onOpenChat(conv._id)}
+                    className="w-full p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 hover:bg-white/10 transition-all flex items-center justify-between group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-cyan-500/10 flex items-center justify-center border border-cyan-500/20">
+                        <User size={16} className="text-cyan-400" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-xs font-bold text-white">{conv.claimant?.name || 'Interested User'}</p>
+                        <p className="text-[10px] text-gray-500">Last active {formatDistanceToNow(conv.updatedAt)} ago</p>
+                      </div>
+                    </div>
+                    <ChevronLeft size={16} className="text-gray-600 group-hover:text-cyan-400 transform rotate-180 transition-all" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {userConversation ? (
+              <Button
+                className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 border-0 h-11"
+                onClick={() => onOpenChat(userConversation._id)}
+              >
+                <MessageCircle size={18} className="mr-2" />
+                Continue Conversation
+              </Button>
+            ) : (
+              <Button
+                className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 border-0 h-11"
+                onClick={() => onStartChat(item)}
+                disabled={!currentUser}
+              >
+                <MessageCircle size={18} className="mr-2" />
+                {item.type === 'found' ? 'Claim this Item' : 'I Found This'}
+              </Button>
+            )}
+          </>
         )}
-        
-        <div className="flex items-center gap-2 text-slate-600">
-          <Clock size={16} className="text-slate-400" />
-          <span>{timeAgo}</span>
-        </div>
-
-        <div className="flex items-center gap-2 text-slate-600">
-          <User size={16} className="text-slate-400" />
-          <span>Posted by {typeof item.owner === 'string' ? 'Unknown' : item.owner?.name || 'Unknown'}</span>
-        </div>
       </div>
-
-      {!item.claimer && !item.isResolved && !isOwner && (
-        <div className="space-y-2">
-          <h4 className="text-sm font-semibold text-slate-700">Contact Finder</h4>
-          {typeof item.owner !== 'string' && item.owner?.email && (
-            <a
-              href={`mailto:${item.owner.email}`}
-              className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
-            >
-              <Mail size={16} />
-              {item.owner.email}
-            </a>
-          )}
-          {typeof item.owner !== 'string' && item.owner?.phone && (
-            <a
-              href={`tel:${item.owner.phone}`}
-              className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
-            >
-              <Phone size={16} />
-              {item.owner.phone}
-            </a>
-          )}
-        </div>
-      )}
-
-      {item.type === 'found' && !item.claimer && !item.isResolved && currentUser && !isOwner && (
-        <Button
-          onClick={() => onClaim(item._id)}
-          className="w-full bg-blue-600 hover:bg-blue-700"
-        >
-          <CheckCircle size={18} />
-          This is Mine - Claim It
-        </Button>
-      )}
-
-      {item.claimer && !item.isResolved && (
-        <div className="space-y-2">
-          <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700">
-            {isClaimer 
-              ? 'You claimed this item! The finder can see your contact details and will help you get it back.'
-              : isOwner
-              ? 'Someone claimed this item! Contact them to arrange the return.'
-              : 'This item has been claimed.'}
-          </div>
-          {isClaimer && item.owner && (
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-slate-700">Finder Contact</h4>
-              <div className="text-sm text-slate-600 mb-2">
-                <User size={14} className="inline mr-1" />
-                {typeof item.owner !== 'string' ? item.owner.name : 'Unknown'}
-              </div>
-              {typeof item.owner !== 'string' && item.owner?.phone && (
-                <div className="flex gap-2">
-                  <a
-                    href={`tel:${item.owner.phone}`}
-                    className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
-                  >
-                    <Phone size={16} />
-                    <span>Call</span>
-                  </a>
-                  <a
-                    href={`https://wa.me/${item.owner.phone.replace(/\D/g, '')}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
-                  >
-                    <MessageCircle size={16} />
-                    <span>WhatsApp</span>
-                  </a>
-                </div>
-              )}
-            </div>
-          )}
-          {isOwner && item.claimer && (
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-slate-700">Claimer Contact</h4>
-              <div className="text-sm text-slate-600 mb-2">
-                <User size={14} className="inline mr-1" />
-                {typeof item.claimer !== 'string' ? item.claimer.name : 'Unknown'}
-              </div>
-              {typeof item.claimer !== 'string' && item.claimer?.phone && (
-                <div className="flex gap-2">
-                  <a
-                    href={`tel:${item.claimer.phone}`}
-                    className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
-                  >
-                    <Phone size={16} />
-                    <span>Call</span>
-                  </a>
-                  <a
-                    href={`https://wa.me/${item.claimer.phone.replace(/\D/g, '')}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
-                  >
-                    <MessageCircle size={16} />
-                    <span>WhatsApp</span>
-                  </a>
-                </div>
-              )}
-            </div>
-          )}
-          
-          {isOwner && (
-            <Button
-              onClick={() => onResolve(item._id)}
-              className="w-full bg-green-600 hover:bg-green-700"
-            >
-              <CheckCircle size={18} />
-              Confirm Item Returned
-            </Button>
-          )}
-          {isClaimer && (
-            <Button
-              onClick={() => onResolve(item._id)}
-              className="w-full bg-green-600 hover:bg-green-700"
-            >
-              <CheckCircle size={18} />
-              Confirm Item Received
-            </Button>
-          )}
-        </div>
-      )}
-
-      {item.isResolved && (
-        <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700 flex items-center gap-2">
-          <CheckCircle size={18} />
-          This item has been successfully returned!
-        </div>
-      )}
     </div>
   );
 };
-
-

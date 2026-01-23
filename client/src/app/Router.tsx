@@ -3,42 +3,53 @@ import { MapPage } from '../pages/MapPage';
 import { LoginPage } from '../pages/LoginPage';
 import { RegisterPage } from '../pages/RegisterPage';
 import { ProfilePage } from '../pages/ProfilePage';
-import { useAuthStore } from '../store/auth.store';
+import { HistoryPage } from '../pages/HistoryPage';
 import { Modal } from '../components/ui/Modal';
 
-const AuthModalWrapper = () => {
+const AuthModals = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const token = useAuthStore((s) => s.token);
-
   const isLoginOpen = location.pathname === '/login';
   const isRegisterOpen = location.pathname === '/register';
 
-  if (token && (isLoginOpen || isRegisterOpen)) {
-    return <Navigate to="/" />;
-  }
-
   const handleClose = () => {
-    navigate('/');
+    navigate('/', { replace: true });
   };
 
   return (
     <>
-      <MapPage />
-      
       <Modal open={isLoginOpen} onClose={handleClose}>
-        <div className="w-full max-w-sm mx-auto">
-          <h2 className="text-2xl font-bold text-slate-900 mb-6 text-center">Welcome Back</h2>
+        <div className="w-full max-w-sm mx-auto text-center">
+            <div className="flex items-center justify-center gap-3 mb-6">
+                <img src="/favicon.png" alt="Relto Logo" className="h-12 w-12 object-contain rounded-xl shadow-lg border border-white/10" />
+                <span className="text-3xl font-bold text-white tracking-tighter text-glow">RELTO</span>
+            </div>
+          <h2 className="text-2xl font-bold text-white mb-2 text-glow">Welcome Back</h2>
+          <p className="text-gray-400 mb-6 text-sm">Sign in to continue your search</p>
           <LoginPage />
         </div>
       </Modal>
 
       <Modal open={isRegisterOpen} onClose={handleClose}>
-        <div className="w-full max-w-sm mx-auto">
-          <h2 className="text-2xl font-bold text-slate-900 mb-6 text-center">Create Account</h2>
+        <div className="w-full max-w-sm mx-auto text-center">
+            <div className="flex items-center justify-center gap-3 mb-6">
+                <img src="/favicon.png" alt="Relto Logo" className="h-12 w-12 object-contain rounded-xl shadow-lg border border-white/10" />
+                <span className="text-3xl font-bold text-white tracking-tighter text-glow">RELTO</span>
+            </div>
+          <h2 className="text-2xl font-bold text-white mb-2 text-glow">Create Account</h2>
+          <p className="text-gray-400 mb-6 text-sm">Join the community to find and return items</p>
           <RegisterPage />
         </div>
       </Modal>
+    </>
+  );
+};
+
+const MainLayout = () => {
+  return (
+    <>
+      <MapPage />
+      <AuthModals />
     </>
   );
 };
@@ -47,10 +58,12 @@ export const Router = () => {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<AuthModalWrapper />} />
-        <Route path="/login" element={<AuthModalWrapper />} />
-        <Route path="/register" element={<AuthModalWrapper />} />
+        <Route path="/" element={<MainLayout />} />
+        <Route path="/login" element={<MainLayout />} />
+        <Route path="/register" element={<MainLayout />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/history" element={<HistoryPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

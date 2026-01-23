@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Map, { Marker } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Button } from '../../components/ui/Button';
 import { useItemStore } from '../../store/item.store';
 import { useMapStore } from '../../store/map.store';
-import { Input } from '../../components/ui/Input';
-import { MapPin } from 'lucide-react';
+import { MapPin, Upload, Image as ImageIcon, X } from 'lucide-react';
 
 type Props = {
   type: 'lost' | 'found';
@@ -31,6 +30,7 @@ export const LocationPicker = ({
   const { latitude, longitude, postingLocation, setPostingLocation } =
     useMapStore();
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [mapLat, setMapLat] = useState<number | null>(null);
   const [mapLng, setMapLng] = useState<number | null>(null);
@@ -107,29 +107,29 @@ export const LocationPicker = ({
 
   if (mapLat === null || mapLng === null) {
     return (
-      <div className="space-y-4">
-        <p className="text-sm text-slate-600">Loading map...</p>
+      <div className="space-y-4 p-8 text-center text-gray-500">
+        <p>Initializing map...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <label className="block text-sm font-medium text-slate-700">
-            Click on the map to select location *
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
+            Pin Location *
           </label>
           <Button
             type="button"
             onClick={handleUseCurrentLocation}
-            className="text-xs px-2 py-1 h-auto"
+            className="text-[10px] h-6 px-2 py-0 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/30"
           >
             Use My Location
           </Button>
         </div>
         <div 
-          className="relative h-64 w-full overflow-hidden rounded-md border border-slate-300"
+          className="relative h-56 w-full overflow-hidden rounded-lg border border-white/10 shadow-inner group"
           onClick={(e) => {
             e.stopPropagation();
           }}
@@ -138,7 +138,7 @@ export const LocationPicker = ({
             {...viewState}
             onMove={(evt) => setViewState(evt.viewState)}
             mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
-            mapStyle="mapbox://styles/mapbox/streets-v12"
+            mapStyle="mapbox://styles/mapbox/dark-v11"
             onClick={handleMapClick}
             onDblClick={(e) => {
               handleMapClick(e);
@@ -164,46 +164,76 @@ export const LocationPicker = ({
                   setPostingLocation(newLat, newLng);
                 }}
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg border-2 border-white cursor-move">
-                  <MapPin size={20} />
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500 text-white shadow-[0_0_15px_rgba(6,182,212,0.6)] border-2 border-white cursor-move hover:scale-110 transition-transform">
+                  <MapPin size={18} fill="white" />
                 </div>
               </Marker>
             )}
           </Map>
+          
+          <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur text-[10px] text-gray-300 px-2 py-1 rounded border border-white/5 pointer-events-none">
+             Click map to pin location
+          </div>
         </div>
-        {mapLat !== null && mapLng !== null && (
-          <p className="mt-1 text-xs text-slate-500">
-            Selected: {mapLat.toFixed(6)}, {mapLng.toFixed(6)} (Drag marker to adjust)
-          </p>
-        )}
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
-          Upload Image (Optional)
+      <div className="space-y-2">
+        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
+          Add Photo (Optional)
         </label>
-        <Input
-          type="file"
-          accept="image/*"
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
+        
+        <input
+            type="file"
+            accept="image/*"
+            ref={fileInputRef}
+            className="hidden"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
         />
-        {file && (
-          <p className="mt-1 text-xs text-slate-500">
-            Selected: {file.name}
-          </p>
+
+        {!file ? (
+            <div 
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-white/10 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-cyan-500/50 hover:bg-white/5 transition-all group"
+            >
+                <div className="h-10 w-10 rounded-full bg-white/5 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                    <Upload size={20} className="text-gray-400 group-hover:text-cyan-400" />
+                </div>
+                <p className="text-sm text-gray-400 font-medium group-hover:text-white">Click to upload image</p>
+                <p className="text-xs text-gray-600">JPG, PNG up to 5MB</p>
+            </div>
+        ) : (
+            <div className="relative rounded-xl border border-white/10 bg-white/5 p-3 flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-black/40 flex items-center justify-center border border-white/5">
+                    <ImageIcon size={20} className="text-cyan-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{file.name}</p>
+                    <p className="text-xs text-gray-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                </div>
+                <button 
+                    onClick={() => {
+                        setFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                    className="p-2 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-colors text-gray-400"
+                >
+                    <X size={18} />
+                </button>
+            </div>
         )}
       </div>
 
       {error && (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">
-          {error}
+        <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs text-red-200 flex items-start gap-2">
+            <X size={14} className="mt-0.5 shrink-0" />
+            {error}
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex gap-3 pt-2">
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           onClick={onBack}
           className="flex-1"
         >
@@ -211,7 +241,7 @@ export const LocationPicker = ({
         </Button>
         <Button
           onClick={submit}
-          className="flex-1"
+          className="flex-1 shadow-lg shadow-cyan-900/20"
           disabled={loading || !mapLat || !mapLng}
         >
           {loading ? 'Posting...' : 'Post Item'}
