@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import confetti from 'canvas-confetti';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useItemStore } from '../../store/item.store';
@@ -57,6 +58,8 @@ export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSi
     itemId: null,
   });
 
+  const [isResolving, setIsResolving] = useState(false);
+
   useEffect(() => {
     if (selectedItemId) {
       const item = allItems.find((i: Item) => i._id === selectedItemId);
@@ -107,12 +110,32 @@ export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSi
   };
 
   const handleResolve = async (itemId: string) => {
+    setIsResolving(true);
     try {
       await resolveItem(itemId);
       toast.success('Item marked as resolved! 🎉');
+      
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.9, x: 0.1 }, 
+        colors: ['#22d3ee', '#0ea5e9', '#ffffff'],
+        zIndex: 9999
+      });
+
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.9, x: 0.9 },
+        colors: ['#22d3ee', '#0ea5e9', '#ffffff'],
+        zIndex: 9999
+      });
+
       selectItem(null);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to resolve item');
+    } finally {
+        setIsResolving(false);
     }
   };
 
@@ -195,6 +218,7 @@ export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSi
                 conversations={conversations}
                 fetchConversationsForItem={fetchConversationsForItem}
                 isMobile={isMobile}
+                isResolving={isResolving}
               />
             </motion.div>
           ) : (
@@ -322,7 +346,7 @@ const ItemCard = ({ item, onClick, isMobile = false }: { item: Item, onClick: ()
   );
 };
 
-const ItemDetails = ({ item, currentUser, onStartChat, onResolve, onDelete, conversations, fetchConversationsForItem }: any) => {
+const ItemDetails = ({ item, currentUser, onStartChat, onResolve, onDelete, conversations, fetchConversationsForItem, isResolving }: any) => {
   const categoryConfig = getCategoryConfig(item.category);
   const Icon = categoryConfig.icon;
   const isOwner = currentUser && item.owner?._id === currentUser._id;
@@ -406,9 +430,14 @@ const ItemDetails = ({ item, currentUser, onStartChat, onResolve, onDelete, conv
             <Button
               className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 border-0 shadow-lg shadow-cyan-900/20 h-11"
               onClick={() => onResolve(item._id)}
+              disabled={isResolving}
             >
-              <CheckCircle size={18} className="mr-2" />
-              Mark as Resolved
+              {isResolving ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+              ) : (
+                <CheckCircle size={18} className="mr-2" />
+              )}
+              {isResolving ? 'Resolving...' : 'Mark as Resolved'}
             </Button>
             <Button
               variant="ghost"
