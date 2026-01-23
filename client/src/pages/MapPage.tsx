@@ -9,7 +9,8 @@ import { useChatStore } from '../store/chat.store';
 import { Button } from '../components/ui/Button';
 import { UserStatsBadge } from '../components/feedback/UserStatsBadge';
 import { ConversationsList } from '../features/chat/ConversationsList';
-import { LogOut, Search, MessageCircle, Sun, Moon, Sunrise, Sunset, Menu, X, List, History as HistoryIcon, Pin, PinOff, ChevronLeft } from 'lucide-react';
+import { ChatSheet } from '../features/chat/ChatSheet';
+import { LogOut, Search, MessageCircle, Sun, Moon, Sunrise, Sunset, Menu, X, List, History as HistoryIcon, Pin, PinOff, ChevronLeft, Globe } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 export const MapPage = () => {
@@ -127,12 +128,9 @@ export const MapPage = () => {
                    onClick={toggleMapStyle}
                    className={`p-2.5 rounded-lg transition-all flex items-center gap-2 ${mapStyle === 'satellite' ? 'text-emerald-400 bg-emerald-500/20' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}
                    title={mapStyle === 'satellite' ? 'Switch to Standard' : 'Switch to Satellite'}
+                   aria-label={mapStyle === 'satellite' ? 'Switch to Standard Map' : 'Switch to Satellite Map'}
                  >
-                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                     <circle cx="12" cy="12" r="10"/>
-                     <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
-                     <path d="M2 12h20"/>
-                   </svg>
+                   <Globe size={16} />
                    <span className="text-sm">{mapStyle === 'satellite' ? 'Sat' : 'Map'}</span>
                  </button>
                  
@@ -182,14 +180,12 @@ export const MapPage = () => {
           </div>
           
           <div className="flex items-center gap-2">
-             {!isSidebarOpen && (
-                <button
-                    onClick={() => setSidebarOpen(true)}
-                    className="p-2 text-cyan-400 hover:bg-white/10 rounded-lg transition-colors"
-                >
-                    <List size={22} />
-                </button>
-             )}
+             <button
+                 onClick={() => setSidebarOpen(!isSidebarOpen)}
+                 className="p-2 text-cyan-400 hover:bg-white/10 rounded-lg transition-colors"
+             >
+                 {isSidebarOpen ? <X size={22} /> : <List size={22} />}
+             </button>
              <button
                onClick={() => setShowMobileMenu(!showMobileMenu)}
                className="p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
@@ -230,6 +226,9 @@ export const MapPage = () => {
                             <Button variant="ghost" className="w-full justify-start gap-2" onClick={() => { setShowMessages(true); setShowMobileMenu(false); }}>
                                 <MessageCircle size={18} /> Messages
                             </Button>
+                            <Button variant="ghost" className={`w-full justify-start gap-2 ${mapStyle === 'satellite' ? 'text-emerald-400 bg-emerald-500/10' : ''}`} onClick={() => { toggleMapStyle(); setShowMobileMenu(false); }}>
+                                <Globe size={18} /> {mapStyle === 'satellite' ? 'Standard Map' : 'Satellite Map'}
+                            </Button>
                         </div>
 
                         <div className="space-y-4 pt-4 border-t border-white/10">
@@ -264,6 +263,7 @@ export const MapPage = () => {
               <ItemsSidebar 
                 searchQuery={searchQuery} 
                 isMobile={isMobile}
+                onClose={() => setSidebarOpen(false)}
               />
             </motion.div>
           )}
@@ -331,6 +331,12 @@ export const MapPage = () => {
       <ConversationsList 
         open={showMessages} 
         onClose={() => setShowMessages(false)} 
+      />
+
+      <ChatSheet
+        open={!!useChatStore((s) => s.activeConversation)}
+        conversation={useChatStore((s) => s.activeConversation)}
+        onClose={() => useChatStore.getState().clearActiveConversation()}
       />
     </div>
   );
