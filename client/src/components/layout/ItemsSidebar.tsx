@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import confetti from 'canvas-confetti';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useItemStore } from '../../store/item.store';
 import { useMapStore } from '../../store/map.store';
@@ -7,11 +9,11 @@ import { useChatStore } from '../../store/chat.store';
 import type { Item } from '../../types/item';
 import { getCategoryConfig } from '../../types/categories';
 import { formatDistanceToNow } from '../../utils/dateUtils';
-import { Clock, User, CheckCircle, MessageCircle, Trash2, ChevronLeft, AlertTriangle } from 'lucide-react';
+import { Clock, User, CheckCircle, MessageCircle, Trash2, ChevronLeft, AlertTriangle, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { StartChatModal } from '../../features/chat/StartChatModal';
-import { ChatSheet } from '../../features/chat/ChatSheet';
+
 import toast from 'react-hot-toast';
 
 interface ItemsSidebarProps {
@@ -55,6 +57,8 @@ export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSi
     isOpen: false,
     itemId: null,
   });
+
+  const [isResolving, setIsResolving] = useState(false);
 
   useEffect(() => {
     if (selectedItemId) {
@@ -106,12 +110,32 @@ export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSi
   };
 
   const handleResolve = async (itemId: string) => {
+    setIsResolving(true);
     try {
       await resolveItem(itemId);
       toast.success('Item marked as resolved! 🎉');
+      
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.9, x: 0.1 }, 
+        colors: ['#22d3ee', '#0ea5e9', '#ffffff'],
+        zIndex: 9999
+      });
+
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.9, x: 0.9 },
+        colors: ['#22d3ee', '#0ea5e9', '#ffffff'],
+        zIndex: 9999
+      });
+
       selectItem(null);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to resolve item');
+    } finally {
+        setIsResolving(false);
     }
   };
 
@@ -142,12 +166,23 @@ export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSi
   return (
     <div className={`${isMobile ? 'w-full h-full' : 'w-80 h-[96vh] my-[2vh] ml-[2vh]'} glass-panel chamfered-box flex flex-col transition-all duration-300 z-40 relative shadow-[0_0_50px_rgba(0,0,0,0.5)]`}>
       <div className={`${isMobile ? 'px-4 py-3' : 'px-6 py-6'} border-b border-white/10`}>
-        {!isMobile && (
-            <div className="mb-6 flex items-center gap-3">
-                 <img src="/favicon.png" alt="Relto Logo" className="h-10 w-10 object-contain rounded-lg shadow-lg border border-white/10" />
-                 <span className="text-2xl font-bold tracking-tight text-cyan-400">RELTO</span>
-            </div>
-        )}
+        <div className="flex items-center justify-between">
+            {!isMobile && (
+                <div className="mb-6 flex items-center gap-3">
+                     <img src="/favicon.png" alt="Relto Logo" className="h-10 w-10 object-contain rounded-lg shadow-lg border border-white/10" />
+                     <span className="text-2xl font-bold tracking-tight text-cyan-400">RELTO</span>
+                </div>
+            )}
+            {isMobile && (
+               <button 
+                  onClick={onClose}
+                  className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                  aria-label="Close sidebar"
+               >
+                   <X size={20} />
+               </button>
+            )}
+        </div>
         <h2 className={`${isMobile ? 'text-lg' : 'text-xl'} font-bold text-white text-glow tracking-tight`}>
           Nearby Items
         </h2>
@@ -178,12 +213,12 @@ export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSi
                 item={selectedItem}
                 currentUser={currentUser}
                 onStartChat={handleStartChatClick}
-                onOpenChat={handleOpenChat}
                 onResolve={handleResolve}
                 onDelete={handleDeleteRequest}
                 conversations={conversations}
                 fetchConversationsForItem={fetchConversationsForItem}
                 isMobile={isMobile}
+                isResolving={isResolving}
               />
             </motion.div>
           ) : (
@@ -220,12 +255,6 @@ export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSi
         onSubmit={handleStartChatSubmit}
         itemTitle={selectedItem?.title || ''}
         itemType={selectedItem?.type || 'found'}
-      />
-
-      <ChatSheet
-        open={showChat}
-        conversation={activeConversation}
-        onClose={handleCloseChat}
       />
 
       <Modal 
@@ -317,18 +346,32 @@ const ItemCard = ({ item, onClick, isMobile = false }: { item: Item, onClick: ()
   );
 };
 
-const ItemDetails = ({ item, currentUser, onStartChat, onOpenChat, onResolve, onDelete, conversations, fetchConversationsForItem }: any) => {
+const ItemDetails = ({ item, currentUser, onStartChat, onResolve, onDelete, conversations, fetchConversationsForItem, isResolving }: any) => {
   const categoryConfig = getCategoryConfig(item.category);
   const Icon = categoryConfig.icon;
   const isOwner = currentUser && item.owner?._id === currentUser._id;
   const itemConversations = conversations.filter((c: any) => c.item?._id === item._id);
   const userConversation = itemConversations.find((c: any) => c.claimant?._id === currentUser?._id || c.poster?._id === currentUser?._id);
+  const navigate = useNavigate();
+  const fetchConversation = useChatStore((s) => s.fetchConversation);
 
   useEffect(() => {
     if (isOwner) {
       fetchConversationsForItem(item._id);
     }
   }, [item._id, isOwner, fetchConversationsForItem]);
+
+  const handleOpenChat = async (conversationId: string) => {
+      await fetchConversation(conversationId);
+  };
+
+  const handleActionClick = () => {
+      if (!currentUser) {
+          navigate('/login');
+          return;
+      }
+      onStartChat(item);
+  };
 
   return (
     <div className="space-y-6">
@@ -376,7 +419,7 @@ const ItemDetails = ({ item, currentUser, onStartChat, onOpenChat, onResolve, on
                 <Clock size={14} className="text-cyan-400" />
                 <span className="text-[10px] font-bold text-gray-500 uppercase">Date</span>
              </div>
-             <p className="text-xs font-medium text-white">{formatDistanceToNow(item.createdAt)} ago</p>
+             <p className="text-xs font-medium text-white">{formatDistanceToNow(item.createdAt)}</p>
           </div>
         </div>
       </div>
@@ -387,9 +430,14 @@ const ItemDetails = ({ item, currentUser, onStartChat, onOpenChat, onResolve, on
             <Button
               className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 border-0 shadow-lg shadow-cyan-900/20 h-11"
               onClick={() => onResolve(item._id)}
+              disabled={isResolving}
             >
-              <CheckCircle size={18} className="mr-2" />
-              Mark as Resolved
+              {isResolving ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+              ) : (
+                <CheckCircle size={18} className="mr-2" />
+              )}
+              {isResolving ? 'Resolving...' : 'Mark as Resolved'}
             </Button>
             <Button
               variant="ghost"
@@ -409,7 +457,7 @@ const ItemDetails = ({ item, currentUser, onStartChat, onOpenChat, onResolve, on
                 {itemConversations.map((conv: any) => (
                   <button
                     key={conv._id}
-                    onClick={() => onOpenChat(conv._id)}
+                    onClick={() => handleOpenChat(conv._id)}
                     className="w-full p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 hover:bg-white/10 transition-all flex items-center justify-between group"
                   >
                     <div className="flex items-center gap-3">
@@ -432,7 +480,7 @@ const ItemDetails = ({ item, currentUser, onStartChat, onOpenChat, onResolve, on
             {userConversation ? (
               <Button
                 className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 border-0 h-11"
-                onClick={() => onOpenChat(userConversation._id)}
+                onClick={() => handleOpenChat(userConversation._id)}
               >
                 <MessageCircle size={18} className="mr-2" />
                 Continue Conversation
@@ -440,8 +488,7 @@ const ItemDetails = ({ item, currentUser, onStartChat, onOpenChat, onResolve, on
             ) : (
               <Button
                 className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 border-0 h-11"
-                onClick={() => onStartChat(item)}
-                disabled={!currentUser}
+                onClick={handleActionClick}
               >
                 <MessageCircle size={18} className="mr-2" />
                 {item.type === 'found' ? 'Claim this Item' : 'I Found This'}

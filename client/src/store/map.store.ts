@@ -6,6 +6,7 @@ type MapStyleType = 'standard' | 'satellite';
 type MapState = {
   latitude: number | null;
   longitude: number | null;
+  accuracy: number | null;
   zoom: number;
   pitch: number;
   bearing: number;
@@ -16,6 +17,7 @@ type MapState = {
   lightPreset: LightPreset;
   show3dObjects: boolean;
   setLocation: (lat: number, lng: number) => void;
+  setAccuracy: (accuracy: number | null) => void;
   setZoom: (zoom: number) => void;
   setPitch: (pitch: number) => void;
   setBearing: (bearing: number) => void;
@@ -31,6 +33,7 @@ type MapState = {
 export const useMapStore = create<MapState>((set) => ({
   latitude: null,
   longitude: null,
+  accuracy: null,
   zoom: 15.5,
   pitch: 45,
   bearing: -17.6,
@@ -42,6 +45,7 @@ export const useMapStore = create<MapState>((set) => ({
   show3dObjects: true,
 
   setLocation: (lat, lng) => set({ latitude: lat, longitude: lng }),
+  setAccuracy: (accuracy) => set({ accuracy }),
   setZoom: (zoom) => set({ zoom }),
   setPitch: (pitch) => set({ pitch }),
   setBearing: (bearing) => set({ bearing }),

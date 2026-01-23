@@ -4,9 +4,10 @@ import { motion } from 'framer-motion';
 type Props = {
   lat: number;
   lng: number;
+  accuracy?: number | null;
 };
 
-export const UserMarker = ({ lat, lng }: Props) => {
+export const UserMarker = ({ lat, lng, accuracy }: Props) => {
   return (
     <Marker latitude={lat} longitude={lng}>
       <div className="relative pointer-events-none">
@@ -50,6 +51,16 @@ export const UserMarker = ({ lat, lng }: Props) => {
         />
         
         <div className="relative h-4 w-4 rounded-full bg-blue-600 border-2 border-white shadow-lg" />
+        
+        {accuracy && (
+          <div className="absolute top-6 left-1/2 -translate-x-1/2 whitespace-nowrap">
+            <div className="px-2 py-0.5 rounded bg-black/70 backdrop-blur-sm border border-white/20">
+              <span className="text-[10px] font-medium text-cyan-400">
+                ±{Math.round(accuracy)}m
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </Marker>
   );

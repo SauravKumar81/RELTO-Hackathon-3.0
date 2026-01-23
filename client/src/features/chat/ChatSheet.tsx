@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Send, ArrowLeft, MoreVertical, AlertTriangle, CheckCircle } from 'lucide-react';
+import { X, Send, ArrowLeft, MoreVertical, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
 import { useChatStore } from '../../store/chat.store';
 import { useAuthStore } from '../../store/auth.store';
 import { formatDistanceToNow } from '../../utils/dateUtils';
@@ -36,6 +36,15 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    if (!conversation) return;
+    setRefreshing(true);
+    await fetchMessages(conversation._id);
+    setTimeout(() => setRefreshing(false), 500); // Minimum spin time
+  };
+  
   if (!conversation || !currentUser) return null;
 
   const isPoster = conversation.poster._id === currentUser._id;
@@ -124,6 +133,14 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleRefresh}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
+                title="Refresh messages"
+                disabled={refreshing}
+              >
+                <RefreshCw size={20} className={refreshing ? "animate-spin" : ""} />
+              </button>
               {getStatusBadge()}
               {isActive && (
                 <div className="relative">
