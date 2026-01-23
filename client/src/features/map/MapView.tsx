@@ -1,4 +1,5 @@
 import Map, { Source, Layer, NavigationControl } from 'react-map-gl';
+import { Locate } from 'lucide-react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useEffect, useRef, useMemo, useState } from 'react';
 import { useMapStore } from '../../store/map.store';
@@ -337,6 +338,25 @@ export const MapView = () => {
       antialias={true}
     >
       <NavigationControl position="bottom-left" showCompass={true} showZoom={true} />
+      
+      <button
+        onClick={() => {
+          if (latitude && longitude && mapRef.current) {
+            mapRef.current.getMap().flyTo({
+              center: [longitude, latitude],
+              zoom: 17,
+              pitch: 60,
+              bearing: 0,
+              duration: 1500,
+              essential: true
+            });
+          }
+        }}
+        className="absolute bottom-80 right-6 z-10 p-3 rounded-xl glass-panel chamfered-box bg-black/40 border border-white/10 text-cyan-400 hover:bg-white/10 hover:text-white shadow-[0_0_20px_rgba(0,0,0,0.3)] transition-all group backdrop-blur-md"
+        title="Fly to My Location"
+      >
+        <Locate size={24} className="group-hover:scale-110 transition-transform" />
+      </button>
       
       {isStyleLoaded && accuracyCircleData && (
         <Source
