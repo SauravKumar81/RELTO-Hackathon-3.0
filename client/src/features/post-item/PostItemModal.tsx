@@ -3,7 +3,7 @@ import { Modal } from '../../components/ui/Modal';
 import { ItemDetailsForm } from './ItemDetailsForm';
 import { LocationPicker } from './LocationPicker';
 import { useMapStore } from '../../store/map.store';
-import { Plus } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 
 type FormData = {
   title: string;
@@ -56,17 +56,26 @@ export const PostItemModal = () => {
               {step === 'details' && 'Post Found Item'}
               {step === 'location' && 'Where Did You Find It?'}
             </h2>
-            <div className="flex gap-1">
-              <div
-                className={`h-1 w-8 rounded ${
-                  step === 'details' ? 'bg-cyan-500' : 'bg-slate-300'
-                }`}
-              />
-              <div
-                className={`h-1 w-8 rounded ${
-                  step === 'location' ? 'bg-cyan-500' : 'bg-slate-300'
-                }`}
-              />
+            <div className="flex items-center gap-3">
+              <div className="flex gap-1">
+                <div
+                  className={`h-1 w-8 rounded ${
+                    step === 'details' ? 'bg-cyan-500' : 'bg-slate-300'
+                  }`}
+                />
+                <div
+                  className={`h-1 w-8 rounded ${
+                    step === 'location' ? 'bg-cyan-500' : 'bg-slate-300'
+                  }`}
+                />
+              </div>
+              <button
+                onClick={handleClose}
+                className="p-1 rounded-full text-gray-400 hover:bg-white/10 hover:text-white transition-colors"
+                aria-label="Close modal"
+              >
+                <X size={20} />
+              </button>
             </div>
           </div>
         </div>
