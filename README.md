@@ -58,7 +58,7 @@ A community-driven lost and found platform with an interactive map interface. Us
 ## Project Structure
 
 ```
-LocalLoop/
+Relto/
 ├── client/
 │   ├── src/
 │   │   ├── app/              # App, Providers, Router setup
@@ -102,7 +102,7 @@ LocalLoop/
 **Server** (`server/.env`):
 ```env
 PORT=5000
-MONGO_URI=mongodb://localhost:27017/localloop
+MONGO_URI=mongodb://localhost:27017/Relto
 JWT_SECRET=your_jwt_secret_key
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
@@ -119,8 +119,8 @@ VITE_MAPBOX_TOKEN=your_mapbox_access_token
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/localloop.git
-cd localloop
+git clone https://github.com/yourusername/Relto.git
+cd Relto
 
 # Install server dependencies
 cd server
