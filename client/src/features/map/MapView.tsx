@@ -10,10 +10,12 @@ export const MapView = () => {
   const { 
     latitude, 
     longitude, 
+    accuracy,
     zoom, 
     pitch, 
     bearing,
     setLocation, 
+    setAccuracy,
     setZoom, 
     setPitch,
     setBearing,
@@ -46,10 +48,44 @@ export const MapView = () => {
     })),
   }), [items]);
 
+  const accuracyCircleData = useMemo(() => {
+    if (!latitude || !longitude || !accuracy) return null;
+    
+    const radiusInKm = accuracy / 1000;
+    const points = 64;
+    const coords = [];
+    
+    for (let i = 0; i < points; i++) {
+      const angle = (i / points) * 2 * Math.PI;
+      const dx = radiusInKm * Math.cos(angle);
+      const dy = radiusInKm * Math.sin(angle);
+      
+      const newLat = latitude + (dy / 111.32);
+      const newLng = longitude + (dx / (111.32 * Math.cos(latitude * Math.PI / 180)));
+      
+      coords.push([newLng, newLat]);
+    }
+    
+    coords.push(coords[0]);
+    
+    return {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [coords],
+        },
+        properties: {},
+      }],
+    };
+  }, [latitude, longitude, accuracy]);
+
   useEffect(() => {
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         setLocation(pos.coords.latitude, pos.coords.longitude);
+        setAccuracy(pos.coords.accuracy);
         setLocationError(null);
       },
       (error) => {
@@ -58,8 +94,8 @@ export const MapView = () => {
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
+        timeout: 30000,
+        maximumAge: 5000
       }
     );
 
@@ -302,7 +338,33 @@ export const MapView = () => {
     >
       <NavigationControl position="bottom-left" showCompass={true} showZoom={true} />
       
-      <UserMarker lat={latitude} lng={longitude} />
+      {isStyleLoaded && accuracyCircleData && (
+        <Source
+          id="accuracy-circle"
+          type="geojson"
+          data={accuracyCircleData as any}
+        >
+          <Layer
+            id="accuracy-circle-fill"
+            type="fill"
+            paint={{
+              'fill-color': '#3b82f6',
+              'fill-opacity': 0.15,
+            }}
+          />
+          <Layer
+            id="accuracy-circle-outline"
+            type="line"
+            paint={{
+              'line-color': '#3b82f6',
+              'line-width': 1.5,
+              'line-opacity': 0.4,
+            }}
+          />
+        </Source>
+      )}
+      
+      <UserMarker lat={latitude} lng={longitude} accuracy={accuracy} />
 
       {isStyleLoaded && (
         <Source

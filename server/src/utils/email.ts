@@ -112,7 +112,6 @@ This is an automated message from Lost & Found.
       text,
       html,
     });
-    console.log(`[Email] Notification sent to ${to}`);
   } catch (error) {
     console.error('[Email] Failed to send notification:', error);
   }

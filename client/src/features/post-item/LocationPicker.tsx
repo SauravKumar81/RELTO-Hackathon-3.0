@@ -27,7 +27,7 @@ export const LocationPicker = ({
 }: Props) => {
   const addItem = useItemStore((s) => s.addItem);
   const loading = useItemStore((s) => s.loading);
-  const { latitude, longitude, postingLocation, setPostingLocation } =
+  const { latitude, longitude, accuracy, postingLocation, setPostingLocation } =
     useMapStore();
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -128,6 +128,13 @@ export const LocationPicker = ({
             Use My Location
           </Button>
         </div>
+        {accuracy && (
+          <div className="px-2 py-1 rounded bg-cyan-500/10 border border-cyan-500/20">
+            <p className="text-[10px] text-cyan-300">
+              GPS accuracy: <span className="font-bold">±{Math.round(accuracy)}m</span> - Drag pin to exact location
+            </p>
+          </div>
+        )}
         <div 
           className="relative h-56 w-full overflow-hidden rounded-lg border border-white/10 shadow-inner group"
           onClick={(e) => {
