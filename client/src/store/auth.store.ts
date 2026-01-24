@@ -47,6 +47,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const user = await getMe();
       set({ user });
     } catch (error) {
+      console.error('Failed to fetch user:', error);
       localStorage.removeItem('token');
       set({ user: null, token: null });
     }
