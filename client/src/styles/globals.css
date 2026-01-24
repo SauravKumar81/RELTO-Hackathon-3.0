@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-dark: #050505;
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-surface: rgba(20, 20, 20, 0.6);
+    --glass-highlight: rgba(255, 255, 255, 0.05);
+    --primary-glow: rgba(0, 255, 255, 0.15);
+    --text-primary: #ededed;
+    --text-secondary: #a1a1aa;
+  }
+
+  body {
+    @apply bg-[var(--bg-dark)] text-[var(--text-primary)] antialiased;
+    background-image: 
+      radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.08) 0%, transparent 50%),
+      radial-gradient(circle at 0% 50%, rgba(56, 189, 248, 0.05) 0%, transparent 50%);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply backdrop-blur-xl border border-[var(--glass-border)] bg-[var(--glass-surface)] shadow-2xl;
+    box-shadow: 0 0 40px -10px rgba(0,0,0,0.5);
+  }
+
+  .chamfered-box {
+    clip-path: polygon(
+      20px 0, 100% 0, 
+      100% calc(100% - 20px), calc(100% - 20px) 100%, 
+      0 100%, 0 20px
+    );
+  }
+  
+  .chamfered-btn {
+    clip-path: polygon(
+      10px 0, 100% 0, 
+      100% calc(100% - 10px), calc(100% - 10px) 100%, 
+      0 100%, 0 10px
+    );
+    transition: all 0.2s ease;
+  }
+  
+  .chamfered-btn:active {
+    transform: scale(0.98);
+  }
+}
+
+@layer utilities {
+  .text-glow {
+    text-shadow: 0 0 20px var(--primary-glow);
+  }
+  
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
