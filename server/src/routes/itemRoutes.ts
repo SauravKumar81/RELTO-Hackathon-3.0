@@ -19,10 +19,10 @@ const router = Router();
 router.get('/history', getHistory);
 router.get('/history/:id', getHistoryItem);
 
-router.get('/', protect, getAllItems);
+router.get('/', getAllItems);
 router.post('/', protect, upload.single('image'), createItem);
-router.get('/nearby', protect, getNearbyItems);
-router.get('/:id', protect, getItemById);
+router.get('/nearby', getNearbyItems);
+router.get('/:id', getItemById);
 router.patch('/:id/claim', protect, claimItem);
 router.patch('/:id/resolve', protect, resolveItem);
 router.delete('/:id', protect, deleteItem);
