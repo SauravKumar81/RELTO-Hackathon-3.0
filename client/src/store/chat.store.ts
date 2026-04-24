@@ -20,6 +20,7 @@ type ChatState = {
   closeConversation: (conversationId: string) => Promise<void>;
   withdrawConversation: (conversationId: string) => Promise<void>;
   clearActiveConversation: () => void;
+  addMessage: (message: Message) => void;
 };
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -167,4 +168,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   clearActiveConversation: () => set({ activeConversation: null, messages: [] }),
+
+  addMessage: (message) => {
+    set((state) => {
+      // Avoid duplicate messages if already appended
+      if (state.messages.some(m => m._id === message._id)) {
+        return state;
+      }
+      return {
+        messages: [...state.messages, message],
+      };
+    });
+  },
 }));

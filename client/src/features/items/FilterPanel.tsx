@@ -1,4 +1,4 @@
-import { CATEGORIES } from '../../types/categories';
+import { CATEGORY_CONFIG } from '../../types/categories';
 import { Button } from '../../components/ui/Button';
 
 interface FilterPanelProps {
@@ -58,8 +58,8 @@ export const FilterPanel = ({
             className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-cyan-500 transition-colors"
           >
             <option value="">All Categories</option>
-            {Object.values(CATEGORIES).map((cat) => (
-              <option key={cat.id} value={cat.id}>
+            {Object.entries(CATEGORY_CONFIG).map(([id, cat]) => (
+              <option key={id} value={id}>
                 {cat.label}
               </option>
             ))}

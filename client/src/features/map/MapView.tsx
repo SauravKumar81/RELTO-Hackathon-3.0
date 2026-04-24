@@ -28,7 +28,7 @@ export const MapView = () => {
     lightPreset,
     show3dObjects
   } = useMapStore();
-  const { data: items = [] } = useNearbyItems(searchLocation?.lat || 0, searchLocation?.lng || 0, 5000, !!searchLocation);
+  const { data: items = [] } = useNearbyItems(searchLocation?.lat || 0, searchLocation?.lng || 0, 5000, undefined, undefined, undefined, !!searchLocation);
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
   const mapRef = useRef<any>(null);
   const [locationError, setLocationError] = useState<string | null>(null);

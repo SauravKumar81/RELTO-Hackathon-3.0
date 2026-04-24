@@ -5,6 +5,7 @@ import { useChatStore } from '../../store/chat.store';
 import { useAuthStore } from '../../store/auth.store';
 import { formatDistanceToNow } from '../../utils/dateUtils';
 import type { Conversation } from '../../types/chat';
+import { getSocket } from '../../hooks/useSocket';
 
 type ChatSheetProps = {
   open: boolean;
@@ -18,6 +19,7 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const closeConversation = useChatStore((s) => s.closeConversation);
   const withdrawConversation = useChatStore((s) => s.withdrawConversation);
+  const addMessage = useChatStore((s) => s.addMessage);
   const currentUser = useAuthStore((s) => s.user);
   
   const [newMessage, setNewMessage] = useState('');
@@ -29,8 +31,26 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
   useEffect(() => {
     if (open && conversation) {
       fetchMessages(conversation._id);
+      
+      const socket = getSocket();
+      if (socket) {
+        socket.emit('join_conversation', conversation._id);
+        
+        const onNewMessage = (msg: any) => {
+          if (msg.conversation === conversation._id) {
+            addMessage(msg);
+          }
+        };
+        
+        socket.on('new_message', onNewMessage);
+        
+        return () => {
+          socket.emit('leave_conversation', conversation._id);
+          socket.off('new_message', onNewMessage);
+        };
+      }
     }
-  }, [open, conversation, fetchMessages]);
+  }, [open, conversation, fetchMessages, addMessage]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
