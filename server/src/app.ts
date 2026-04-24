@@ -53,6 +53,10 @@ app.use('/api/items', itemRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/reports', reportRoutes);
 
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 app.use(globalErrorHandler);
 
 export default app;

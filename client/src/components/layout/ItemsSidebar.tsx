@@ -18,20 +18,29 @@ import toast from 'react-hot-toast';
 
 interface ItemsSidebarProps {
   searchQuery: string;
+  category?: string;
+  type?: string;
   isMobile?: boolean;
   onClose?: () => void;
 }
 
-export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSidebarProps) => {
+export const ItemsSidebar = ({ searchQuery, category, type, isMobile = false, onClose }: ItemsSidebarProps) => {
   const searchLocation = useMapStore((s) => s.searchLocation);
   const { data: allItems = [] } = useNearbyItems(
     searchLocation?.lat || 0,
     searchLocation?.lng || 0,
     searchLocation?.radius || 0,
+    searchQuery,
+    category,
+    type,
     !!searchLocation
   );
   
+  // Note: Local filtering by text/category/type is redundant since backend is doing it now,
+  // but keeping it here just in case for real-time item additions.
   const items = allItems.filter((item: Item) => {
+    if (category && item.category !== category) return false;
+    if (type && item.type !== type) return false;
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     const categoryConfig = getCategoryConfig(item.category);

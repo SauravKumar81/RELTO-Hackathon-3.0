@@ -10,8 +10,10 @@ import { Button } from '../components/ui/Button';
 import { UserStatsBadge } from '../components/feedback/UserStatsBadge';
 import { ConversationsList } from '../features/chat/ConversationsList';
 import { ChatSheet } from '../features/chat/ChatSheet';
-import { LogOut, Search, MessageCircle, Sun, Moon, Sunrise, Sunset, Menu, X, List, History as HistoryIcon, Pin, PinOff, ChevronLeft, Globe } from 'lucide-react';
+import { LogOut, Search, MessageCircle, Sun, Moon, Sunrise, Sunset, Menu, X, List, History as HistoryIcon, Pin, PinOff, ChevronLeft, Globe, Filter } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useDebounce } from '../hooks/useDebounce';
+import { FilterPanel } from '../features/items/FilterPanel';
 
 export const MapPage = () => {
   const navigate = useNavigate();
@@ -31,6 +33,14 @@ export const MapPage = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
+  
+  // Filtering state
+  const [category, setCategory] = useState('');
+  const [type, setType] = useState('');
+  const [urgency, setUrgency] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   useEffect(() => {
     if (!isMobile && isPinned) {
@@ -114,6 +124,22 @@ export const MapPage = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-transparent border-none text-white placeholder-gray-500 focus:ring-0 text-sm h-10 px-3 outline-none"
                 />
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`p-2 rounded-lg transition-colors mr-1 ${showFilters || category || type ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+                >
+                  <Filter size={18} />
+                </button>
+                {showFilters && (
+                  <FilterPanel
+                    category={category}
+                    type={type}
+                    urgency={urgency}
+                    onCategoryChange={setCategory}
+                    onTypeChange={setType}
+                    onUrgencyChange={setUrgency}
+                  />
+                )}
               </div>
 
             <div className="glass-panel chamfered-box p-1.5 flex items-center gap-1">
@@ -261,7 +287,9 @@ export const MapPage = () => {
               className="h-full pointer-events-auto overflow-visible"
             >
               <ItemsSidebar 
-                searchQuery={searchQuery} 
+                searchQuery={debouncedSearchQuery} 
+                category={category}
+                type={type}
                 isMobile={isMobile}
                 onClose={() => setSidebarOpen(false)}
               />

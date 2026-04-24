@@ -17,6 +17,9 @@ const server = http.createServer(app);
 
 initSocket(server);
 
+// Start background jobs
+import './jobs/archiveItems';
+
 server.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
 });
