@@ -11,6 +11,7 @@ import { Button } from '../components/ui/Button';
 import { UserStatsBadge } from '../components/feedback/UserStatsBadge';
 import { ConversationsList } from '../features/chat/ConversationsList';
 import { ChatSheet } from '../features/chat/ChatSheet';
+import { NotificationsList } from '../features/notifications/NotificationsList';
 import { LogOut, Search, MessageCircle, Sun, Moon, Sunrise, Sunset, Menu, X, List, History as HistoryIcon, Pin, PinOff, ChevronLeft, Globe, Filter, Bell } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useDebounce } from '../hooks/useDebounce';
@@ -30,19 +31,30 @@ export const MapPage = () => {
   const fetchUnreadCount = useChatStore((s) => s.fetchUnreadCount);
   const unreadNotifications = useNotificationStore((s) => s.unreadCount);
   const [searchParams, setSearchParams] = useSearchParams();
-  const searchQuery = searchParams.get('q') || '';
   const category = searchParams.get('category') || '';
   const type = searchParams.get('type') || '';
   const urgency = searchParams.get('urgency') === 'true';
 
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
   const [showMessages, setShowMessages] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+  useEffect(() => {
+    const newParams = new URLSearchParams(searchParams);
+    if (debouncedSearchQuery) {
+      newParams.set('q', debouncedSearchQuery);
+    } else {
+      newParams.delete('q');
+    }
+    setSearchParams(newParams, { replace: true });
+  }, [debouncedSearchQuery]);
 
   const updateFilters = (updates: Record<string, string | null>) => {
     const newParams = new URLSearchParams(searchParams);
@@ -135,7 +147,7 @@ export const MapPage = () => {
                   type="text"
                   placeholder="Search nearby items..."
                   value={searchQuery}
-                  onChange={(e) => updateFilters({ q: e.target.value })}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-transparent border-none text-white placeholder-gray-500 focus:ring-0 text-sm h-10 px-3 outline-none"
                 />
                 <button
@@ -180,6 +192,7 @@ export const MapPage = () => {
                     <div className="flex items-center gap-2 pl-1">
                       <div className="flex items-center gap-1">
                         <button 
+                          onClick={() => setShowNotifications(true)}
                           className="relative p-2.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-all group"
                           title="Notifications"
                         >
@@ -267,7 +280,7 @@ export const MapPage = () => {
                         type="text"
                         placeholder="Search..."
                         value={searchQuery}
-                        onChange={(e) => updateFilters({ q: e.target.value })}
+                        onChange={(e) => setSearchQuery(e.target.value)}
                         className="bg-transparent border-none text-white focus:ring-0 text-sm w-full outline-none"
                       />
                    </div>
@@ -281,6 +294,10 @@ export const MapPage = () => {
                             </Button>
                             <Button variant="ghost" className="w-full justify-start gap-2" onClick={() => { setShowMessages(true); setShowMobileMenu(false); }}>
                                 <MessageCircle size={18} /> Messages
+                            </Button>
+                            <Button variant="ghost" className="w-full justify-start gap-2" onClick={() => { setShowNotifications(true); setShowMobileMenu(false); }}>
+                                <Bell size={18} /> Notifications
+                                {unreadNotifications > 0 && <span className="bg-cyan-500 text-white text-[10px] rounded-full px-1.5 py-0.5 ml-auto">{unreadNotifications}</span>}
                             </Button>
                             <Button variant="ghost" className={`w-full justify-start gap-2 ${mapStyle === 'satellite' ? 'text-emerald-400 bg-emerald-500/10' : ''}`} onClick={() => { toggleMapStyle(); setShowMobileMenu(false); }}>
                                 <Globe size={18} /> {mapStyle === 'satellite' ? 'Standard Map' : 'Satellite Map'}
@@ -395,6 +412,11 @@ export const MapPage = () => {
         open={!!useChatStore((s) => s.activeConversation)}
         conversation={useChatStore((s) => s.activeConversation)}
         onClose={() => useChatStore.getState().clearActiveConversation()}
+      />
+
+      <NotificationsList
+        open={showNotifications}
+        onClose={() => setShowNotifications(false)}
       />
     </div>
   );

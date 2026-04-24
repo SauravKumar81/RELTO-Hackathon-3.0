@@ -6,8 +6,14 @@ import { useMapStore } from '../../store/map.store';
 import { useNearbyItems } from '../../hooks/useItems';
 import { ItemMarker } from './ItemMarker';
 import { UserMarker } from './UserMarker';
+import { useSearchParams } from 'react-router-dom';
 
 export const MapView = () => {
+  const [searchParams] = useSearchParams();
+  const q = searchParams.get('q') || undefined;
+  const category = searchParams.get('category') || undefined;
+  const type = searchParams.get('type') || undefined;
+
   const { 
     latitude, 
     longitude, 
@@ -28,7 +34,7 @@ export const MapView = () => {
     lightPreset,
     show3dObjects
   } = useMapStore();
-  const { data: items = [] } = useNearbyItems(searchLocation?.lat || 0, searchLocation?.lng || 0, 5000, undefined, undefined, undefined, !!searchLocation);
+  const { data: items = [] } = useNearbyItems(searchLocation?.lat || 0, searchLocation?.lng || 0, 5000, q, category, type, !!searchLocation);
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
   const mapRef = useRef<any>(null);
   const [locationError, setLocationError] = useState<string | null>(null);

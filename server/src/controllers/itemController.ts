@@ -78,9 +78,9 @@ export const createItem = async (req: Request, res: Response) => {
 
 export const getAllItems = async (req: Request, res: Response) => {
   try {
-    const { q, category, type } = req.query;
+    const { q, category, type, urgency } = req.query;
 
-    const cacheKey = `items:all:${q || ''}:${category || ''}:${type || ''}`;
+    const cacheKey = `items:all:${q || ''}:${category || ''}:${type || ''}:${urgency || ''}`;
     
     const items = await getOrSet(cacheKey, async () => {
       const query: any = { isResolved: false };
@@ -98,6 +98,10 @@ export const getAllItems = async (req: Request, res: Response) => {
         query.type = type;
       }
 
+      if (urgency === 'true') {
+        query.expiresAt = { $lte: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000) };
+      }
+
       return await Item.find(query)
         .populate('owner', 'name')
         .populate('claimer', 'name');
@@ -110,13 +114,13 @@ export const getAllItems = async (req: Request, res: Response) => {
 };
 
 export const getNearbyItems = async (req: Request, res: Response) => {
-  const { lat, lng, radius = 2000, q, category, type } = req.query;
+  const { lat, lng, radius = 2000, q, category, type, urgency } = req.query;
 
   if (!lat || !lng) {
     return res.status(400).json({ message: 'Latitude and longitude required' });
   }
 
-  const cacheKey = `items:nearby:${lat}:${lng}:${radius}:${q || ''}:${category || ''}:${type || ''}`;
+  const cacheKey = `items:nearby:${lat}:${lng}:${radius}:${q || ''}:${category || ''}:${type || ''}:${urgency || ''}`;
   const items = await getOrSet(cacheKey, async () => {
     const query: any = {
       isResolved: false,
@@ -142,6 +146,10 @@ export const getNearbyItems = async (req: Request, res: Response) => {
 
     if (type && ['lost', 'found'].includes(type as string)) {
       query.type = type;
+    }
+
+    if (urgency === 'true') {
+      query.expiresAt = { $lte: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000) };
     }
 
     return await Item.find(query)
