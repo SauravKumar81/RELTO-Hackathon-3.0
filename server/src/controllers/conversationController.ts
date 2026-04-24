@@ -5,6 +5,7 @@ import Message from '../models/Message';
 import Item from '../models/Item';
 import User from '../models/User';
 import { sendNotificationEmail } from "../utils/email";
+import { getIO } from '../socket';
 
 export const startConversation = async (req: Request, res: Response) => {
   const { itemId, initialMessage } = req.body;
@@ -296,6 +297,19 @@ export const sendMessage = async (req: Request, res: Response) => {
   }
 
   await message.populate('sender', 'name');
+
+  try {
+    const io = getIO();
+    // Emit to conversation room and to recipient's personal room
+    io.to(`conversation:${id}`).emit('new_message', message);
+    io.to(`user:${(recipient as any)._id}`).emit('new_notification', {
+      type: 'new_message',
+      message: `New message about: ${item.title}`,
+      conversationId: id,
+    });
+  } catch (error) {
+    console.error('Socket error:', error);
+  }
 
   res.status(201).json(message);
 };

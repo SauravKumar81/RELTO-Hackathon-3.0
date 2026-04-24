@@ -5,6 +5,7 @@ import User from '../models/User';
 import cloudinary from '../config/cloudinary';
 import { POINTS, calculateLevel } from '../utils/gamification';
 import { getOrSet, invalidate } from '../utils/cache';
+import { getIO } from '../socket';
 
 export const createItem = async (req: Request, res: Response) => {
   const {
@@ -184,6 +185,24 @@ export const resolveItem = async (req: Request, res: Response) => {
 
   await invalidate('items:*');
 
+  try {
+    const io = getIO();
+    io.to(`user:${item.owner.toString()}`).emit('new_notification', {
+      type: 'item_resolved',
+      message: `Your item "${item.title}" has been marked as resolved!`,
+      itemId: id,
+    });
+    if (item.claimer && item.claimer.toString() !== item.owner.toString()) {
+      io.to(`user:${item.claimer.toString()}`).emit('new_notification', {
+        type: 'item_resolved',
+        message: `The item "${item.title}" you claimed has been marked as resolved!`,
+        itemId: id,
+      });
+    }
+  } catch (error) {
+    console.error('Socket error:', error);
+  }
+
   res.status(200).json({ message: 'Item resolved' });
 };
 
@@ -252,6 +271,17 @@ export const claimItem = async (req: Request, res: Response) => {
   await item.populate('claimer', 'name');
 
   await invalidate('items:*');
+
+  try {
+    const io = getIO();
+    io.to(`user:${item.owner._id.toString()}`).emit('new_notification', {
+      type: 'item_claimed',
+      message: `Someone claimed your item "${item.title}"!`,
+      itemId: id,
+    });
+  } catch (error) {
+    console.error('Socket error:', error);
+  }
 
   res.status(200).json(item);
 };
