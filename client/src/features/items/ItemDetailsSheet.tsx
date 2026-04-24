@@ -14,7 +14,7 @@ import { ChatSheet } from '../chat/ChatSheet';
 
 export const ItemDetailsSheet = () => {
   const selectedItemId = useMapStore((s) => s.selectedItemId);
-  const { data: item, isLoading: isFetchingItem } = useItemById(selectedItemId || '', !!selectedItemId);
+  const { data: item } = useItemById(selectedItemId || '', !!selectedItemId);
   
   const resolveMutation = useResolveItem();
   

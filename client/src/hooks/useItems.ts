@@ -77,7 +77,7 @@ export const useResolveItem = () => {
 
   return useMutation({
     mutationFn: (id: string) => resolveItem(id),
-    onSuccess: async (_, id) => {
+    onSuccess: async () => {
       const currentUser = useAuthStore.getState().user;
       const oldPoints = currentUser?.points || 0;
       
@@ -105,7 +105,7 @@ export const useClaimItem = () => {
 
   return useMutation({
     mutationFn: (id: string) => claimItem(id),
-    onSuccess: async (data, id) => {
+    onSuccess: async () => {
       const currentUser = useAuthStore.getState().user;
       const oldPoints = currentUser?.points || 0;
       

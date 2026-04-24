@@ -50,14 +50,10 @@ export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSi
   const startConversation = useChatStore((s) => s.startConversation);
   const conversations = useChatStore((s) => s.conversations);
   const fetchConversationsForItem = useChatStore((s) => s.fetchConversationsForItem);
-  const activeConversation = useChatStore((s) => s.activeConversation);
   const fetchConversation = useChatStore((s) => s.fetchConversation);
-  const clearActiveConversation = useChatStore((s) => s.clearActiveConversation);
   
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [showStartChatModal, setShowStartChatModal] = useState(false);
-  const [showChat, setShowChat] = useState(false);
-  const [startingChat, setStartingChat] = useState(false);
   
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; itemId: string | null }>({
     isOpen: false,
@@ -88,31 +84,13 @@ export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSi
 
   const handleStartChatSubmit = async (initialMessage: string) => {
     if (!selectedItem) return;
-    setStartingChat(true);
     try {
       const conversation = await startConversation(selectedItem._id, initialMessage);
       setShowStartChatModal(false);
       await fetchConversation(conversation._id);
-      setShowChat(true);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to start conversation');
-    } finally {
-      setStartingChat(false);
     }
-  };
-
-  const handleOpenChat = async (conversationId: string) => {
-    try {
-      await fetchConversation(conversationId);
-      setShowChat(true);
-    } catch (error: any) {
-      toast.error('Failed to open chat');
-    }
-  };
-
-  const handleCloseChat = () => {
-    setShowChat(false);
-    clearActiveConversation();
   };
 
   const handleResolve = async (itemId: string) => {

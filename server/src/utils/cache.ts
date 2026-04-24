@@ -1,36 +1,15 @@
-import Redis from 'ioredis';
-import logger from '../config/logger';
+import { redis } from '../config/redis';
+import { logger } from '../utils/logger';
 
-// Default to localhost if not specified in env
-const redisUri = process.env.REDIS_URI || 'redis://localhost:6379';
-
-// Initialize Redis client
-export const redis = new Redis(redisUri, {
-  retryStrategy(times) {
-    // Reconnect after
-    const delay = Math.min(times * 50, 2000);
-    return delay;
-  },
-  maxRetriesPerRequest: 3,
-});
-
-redis.on('connect', () => {
-  logger.info('✅ Redis connected successfully');
-});
-
-redis.on('error', (err) => {
-  logger.error('❌ Redis connection error', { error: err.message });
-});
-
-const DEFAULT_EXPIRATION = 3600; // 1 hour in seconds
+const DEFAULT_EXPIRATION = 300; // 5 minutes in seconds
 
 /**
  * Get data from cache, or execute the callback to get data, then cache it.
  * @param key The cache key
  * @param cb The callback function that returns the data to be cached (Promise)
- * @param ttl Time to live in seconds (default: 3600)
+ * @param ttl Time to live in seconds (default: 300)
  */
-export const getOrSetCache = async <T>(
+export const getOrSet = async <T>(
   key: string,
   cb: () => Promise<T>,
   ttl: number = DEFAULT_EXPIRATION
@@ -63,7 +42,7 @@ export const getOrSetCache = async <T>(
  * Invalidate all cache keys matching a pattern
  * @param pattern The pattern to match (e.g., "items:*")
  */
-export const invalidateCache = async (pattern: string): Promise<void> => {
+export const invalidate = async (pattern: string): Promise<void> => {
   try {
     let cursor = '0';
     const keysToDelete: string[] = [];

@@ -4,7 +4,7 @@ import Item from '../models/Item';
 import User from '../models/User';
 import cloudinary from '../config/cloudinary';
 import { POINTS, calculateLevel } from '../utils/gamification';
-import { getOrSetCache, invalidateCache } from '../utils/cache';
+import { getOrSet, invalidate } from '../utils/cache';
 
 export const createItem = async (req: Request, res: Response) => {
   const {
@@ -69,7 +69,7 @@ export const createItem = async (req: Request, res: Response) => {
 
   await item.populate('owner', 'name');
 
-  await invalidateCache('items:*');
+  await invalidate('items:*');
 
   res.status(201).json(item);
 };
@@ -77,7 +77,7 @@ export const createItem = async (req: Request, res: Response) => {
 
 export const getAllItems = async (req: Request, res: Response) => {
   try {
-    const items = await getOrSetCache('items:all', async () => {
+    const items = await getOrSet('items:all', async () => {
       return await Item.find({
         isResolved: false,
       })
@@ -99,7 +99,7 @@ export const getNearbyItems = async (req: Request, res: Response) => {
   }
 
   const cacheKey = `items:nearby:${lat}:${lng}:${radius}`;
-  const items = await getOrSetCache(cacheKey, async () => {
+  const items = await getOrSet(cacheKey, async () => {
     return await Item.find({
       isResolved: false,
       location: {
@@ -126,7 +126,7 @@ export const getItemById = async (req: Request, res: Response) => {
     return res.status(400).json({ message: 'Invalid item ID format' });
   }
 
-  const item = await getOrSetCache(`items:${id}`, async () => {
+  const item = await getOrSet(`items:${id}`, async () => {
     return await Item.findById(id)
       .populate('owner', 'name')
       .populate('claimer', 'name');
@@ -182,7 +182,7 @@ export const resolveItem = async (req: Request, res: Response) => {
     }
   }
 
-  await invalidateCache('items:*');
+  await invalidate('items:*');
 
   res.status(200).json({ message: 'Item resolved' });
 };
@@ -207,7 +207,7 @@ export const deleteItem = async (req: Request, res: Response) => {
 
   await Item.findByIdAndDelete(id);
 
-  await invalidateCache('items:*');
+  await invalidate('items:*');
 
   res.status(200).json({ message: 'Item deleted successfully' });
 };
@@ -251,7 +251,7 @@ export const claimItem = async (req: Request, res: Response) => {
 
   await item.populate('claimer', 'name');
 
-  await invalidateCache('items:*');
+  await invalidate('items:*');
 
   res.status(200).json(item);
 };
@@ -291,7 +291,7 @@ export const getHistory = async (req: Request, res: Response) => {
 
     const cacheKey = `items:history:${search || ''}:${category || ''}:${type || ''}:${page}:${limit}:${sortBy}:${sortOrder}`;
     
-    const result = await getOrSetCache(cacheKey, async () => {
+    const result = await getOrSet(cacheKey, async () => {
       const items = await Item.find(query)
         .populate('owner', 'name email')
         .populate('claimer', 'name email')
@@ -326,7 +326,7 @@ export const getHistoryItem = async (req: Request, res: Response) => {
     return res.status(400).json({ message: 'Invalid item ID format' });
   }
 
-  const item = await getOrSetCache(`items:history:${id}`, async () => {
+  const item = await getOrSet(`items:history:${id}`, async () => {
     return await Item.findById(id)
       .populate('owner', 'name email')
       .populate('claimer', 'name email')
