@@ -1,0 +1,949 @@
+
+
+
+RELTO
+Community Lost & Found Platform
+Production Upgrade Master SOP
+Prepared For
+RELTO Development Team
+Version
+v2.0 Production-Ready
+Stack
+React 18 / Node.js / MongoDB / Redis
+Date
+April 2026
+
+
+
+
+1. Project Analysis & Strengths
+RELTO is a well-architected, feature-rich community platform for lost-and-found item management. The codebase demonstrates strong full-stack TypeScript discipline, clean feature-based folder structure, and thoughtful UX design. Below is a recognition of the solid foundations already in place:
+
+Module
+What's Done Well
+Current Maturity
+Authentication
+JWT + bcrypt, protected routes
+Strong
+Map Interface
+Mapbox GL, fly-to animations, geolocation
+Strong
+Item Management
+3-step wizard, 16 categories, urgency flags
+Strong
+Gamification
+Points, ranks, achievements schema
+Good
+Chat System
+Private in-app conversations
+Good
+Image Handling
+Cloudinary integration + Multer
+Good
+State Management
+Zustand stores
+Good
+API Design
+RESTful, consistent, auth-protected
+Good
+
+Overall Assessment:
+RELTO is production-capable as a hackathon project. With the upgrades in this SOP, it becomes a market-ready, scalable platform ready for real user traffic and investor demos.
+
+2. Caching Overhaul — Complete Strategy
+This is the highest-priority improvement. The current architecture makes direct DB calls on every request with no intermediate caching layer. At any real user scale (500+ DAU), this will cause MongoDB to become a bottleneck, map loads to be slow, and API latency to spike. The following is a complete multi-layer caching strategy.
+
+2.1 Caching Architecture Overview
+Implement a three-tier cache: Browser/CDN (Layer 1) → Redis (Layer 2) → MongoDB (Layer 3).
+
+Rule of Thumb:
+Cache reads aggressively, invalidate writes surgically. Any GET endpoint hitting MongoDB more than 50 times/min for the same resource needs Redis.
+
+2.2 Redis Installation & Setup
+Server-Side Redis Client Setup
+Install and configure ioredis in the Express server:
+
+npm install ioredis @types/ioredis
+
+// server/src/config/redis.ts
+import Redis from 'ioredis';
+
+export const redis = new Redis({
+  host: process.env.REDIS_HOST || 'localhost',
+  port: parseInt(process.env.REDIS_PORT || '6379'),
+  password: process.env.REDIS_PASSWORD,
+  retryDelayOnFailover: 100,
+  maxRetriesPerRequest: 3,
+  lazyConnect: true,
+});
+
+redis.on('error', (err) => console.error('Redis error:', err));
+redis.on('connect', () => console.log('Redis connected'));
+
+Cache Helper Utility
+// server/src/utils/cache.ts
+import { redis } from '../config/redis';
+
+type CacheOptions = { ttl?: number; prefix?: string };
+
+export async function getOrSet<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  ttl: number = 300  // seconds
+): Promise<T> {
+  const cached = await redis.get(key);
+  if (cached) return JSON.parse(cached) as T;
+  const data = await fetcher();
+  await redis.setex(key, ttl, JSON.stringify(data));
+  return data;
+}
+
+export async function invalidate(pattern: string) {
+  const keys = await redis.keys(pattern);
+  if (keys.length) await redis.del(...keys);
+}
+
+2.3 Caching Rules Per Endpoint
+
+Endpoint
+Cache Key
+TTL
+Invalidate On
+GET /api/items
+items:all:{page}:{filters}
+5 min
+POST /items, PATCH /items/:id
+GET /api/items/nearby
+items:nearby:{lat}:{lng}:{radius}
+3 min
+Any item create/update
+GET /api/items/:id
+item:{id}
+10 min
+PATCH/DELETE /items/:id
+GET /api/users/me
+user:{userId}:profile
+15 min
+Any profile update
+GET /api/conversations
+convos:{userId}
+1 min
+POST message
+GET /api/conversations/:id/messages
+messages:{convoId}:{page}
+30 sec
+POST message
+Leaderboard
+leaderboard:top50
+10 min
+Any point award
+Item Categories Count
+stats:categories
+1 hour
+POST/DELETE item
+
+2.4 Controller-Level Caching Example
+Apply the cache pattern to the item listing controller:
+
+// server/src/controllers/itemController.ts
+import { getOrSet, invalidate } from '../utils/cache';
+
+export const getItems = async (req, res) => {
+  const { page = 1, category, status } = req.query;
+  const cacheKey = `items:all:${page}:${category}:${status}`;
+
+  const result = await getOrSet(cacheKey, async () => {
+    return await Item.find(buildQuery(req.query))
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * 20)
+      .limit(20)
+      .lean(); // Always use .lean() for cached reads
+  }, 300);
+
+  res.json(result);
+};
+
+export const createItem = async (req, res) => {
+  const item = await Item.create({ ...req.body, finder: req.user._id });
+  // Invalidate all item caches on new post
+  await invalidate('items:*');
+  res.status(201).json(item);
+};
+
+2.5 Client-Side Caching with TanStack Query
+Replace raw Axios calls in the React frontend with TanStack Query (React Query v5) for automatic stale-while-revalidate caching, background refetching, and deduplication:
+
+npm install @tanstack/react-query @tanstack/react-query-devtools
+
+// client/src/app/queryClient.ts
+import { QueryClient } from '@tanstack/react-query';
+
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5,    // 5 minutes
+      gcTime: 1000 * 60 * 10,       // 10 minutes
+      retry: 2,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+// Example: useItems hook
+export function useItems(filters: ItemFilters) {
+  return useQuery({
+    queryKey: ['items', filters],
+    queryFn: () => api.items.getAll(filters),
+    staleTime: 1000 * 60 * 3,
+  });
+}
+
+// On mutation — surgical invalidation
+const createItemMutation = useMutation({
+  mutationFn: api.items.create,
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['items'] });
+  },
+});
+
+2.6 Mapbox Tile & GeoJSON Caching
+Map tile requests can be expensive. Implement a Cloudflare CDN layer or Nginx proxy cache in front of Mapbox tile requests, and cache GeoJSON feature collections for the map markers:
+
+// Cache the map markers GeoJSON — recalculate only when items change
+export async function getMapGeoJSON() {
+  return getOrSet('map:geojson:features', async () => {
+    const items = await Item.find({ status: { $in: ['found', 'claimed'] } })
+      .select('location category status title _id').lean();
+    return {
+      type: 'FeatureCollection',
+      features: items.map(toGeoJSONFeature)
+    };
+  }, 120); // 2 min TTL
+}
+
+2.7 MongoDB Index Optimization (Pre-cache Queries)
+Before adding caching, ensure MongoDB queries are fast. Add these compound indexes to item and user models:
+
+// server/src/models/Item.ts — add to schema
+ItemSchema.index({ location: '2dsphere' });           // geospatial
+ItemSchema.index({ status: 1, createdAt: -1 });       // listing
+ItemSchema.index({ category: 1, status: 1 });         // filtered listing
+ItemSchema.index({ finder: 1, createdAt: -1 });       // user's posts
+ItemSchema.index({ 'claimedBy': 1 });                  // claim lookups
+
+// server/src/models/User.ts
+UserSchema.index({ points: -1 });                     // leaderboard
+
+REMOVE from Production:
+DELETE all console.log() in production code. Use Winston logger with log levels instead. console.log blocks the event loop and exposes internal state.
+
+3. New Feature Roadmap
+The following features are prioritized by impact and implementation complexity. Features are grouped into three release waves.
+
+3.1 Wave 1 — High Impact, Low Effort (2-3 Weeks)
+
+Feature A: Real-Time WebSocket Notifications
+The current chat system likely polls the API. Replace with Socket.IO for real-time push.
+
+Task
+Detail
+Files
+Install Socket.IO
+npm install socket.io on server, socket.io-client on client
+package.json
+Create Socket server
+Attach to existing Express HTTP server, handle auth via JWT middleware
+server/src/socket/index.ts
+Events to implement
+new_message, item_claimed, item_resolved, new_notification
+server/src/socket/events.ts
+Client socket hook
+useSocket() hook wrapping socket.io-client, auto-reconnect
+client/src/hooks/useSocket.ts
+Notification store
+Zustand notificationStore with unread count badge
+client/src/store/notifications.ts
+
+Feature B: AI-Powered Item Matching
+Automatically suggest potential matches between lost reports and found items using description similarity and location proximity. This is the killer differentiator feature.
+
+Use OpenAI embeddings (text-embedding-3-small) to vectorize item titles and descriptions
+Store embedding vector in MongoDB with the item document
+On new item post, run a similarity search against the opposite category (lost vs found)
+Surface top 3 matches to the poster with a 'Could this be yours?' notification
+Use cosine similarity or MongoDB Atlas Vector Search for matching
+
+// Pseudocode: server/src/services/matchingService.ts
+async function findMatches(newItem: IItem) {
+  const embedding = await openai.embeddings.create({ input: newItem.description });
+  const oppositeCategory = newItem.type === 'lost' ? 'found' : 'lost';
+  const candidates = await Item.aggregate([
+    { $vectorSearch: { queryVector: embedding.data[0].embedding, ... } },
+    { $match: { type: oppositeCategory, status: 'active' } },
+    { $limit: 3 }
+  ]);
+  await notifyUser(newItem.userId, 'potential_match', candidates);
+}
+
+Feature C: Advanced Search & Filters
+The current item listing has no visible advanced search. Add server-side full-text search and multi-filter support:
+
+MongoDB text index on title + description fields
+Frontend filter panel: date range, radius slider, category multi-select, urgency toggle
+Debounced search input (300ms) with URL query param sync
+Search results page with highlighted matching terms
+
+ItemSchema.index({ title: 'text', description: 'text' });
+// Query: Item.find({ $text: { $search: req.query.q } })
+
+Feature D: PWA + Push Notifications
+Convert RELTO to a Progressive Web App for offline access and native push notifications on mobile:
+
+Add manifest.json and service worker via Vite PWA plugin (vite-plugin-pwa)
+Implement Web Push using web-push npm package on server
+Store push subscriptions in User model
+Send pushes for: item claimed, match found, message received
+Offline fallback page showing cached items from last session
+
+3.2 Wave 2 — Medium Impact (4-6 Weeks)
+
+Feature E: Admin Moderation Dashboard
+A separate admin panel (/admin route, admin-only JWT role) with:
+
+User management: ban/unban, view stats
+Item moderation: flag review queue, remove inappropriate content
+Report triage: view all user reports, take action
+Platform analytics: items posted per day, average claim time, top categories
+Announcement broadcast: push message to all users
+
+Feature F: QR Code for Items
+Generate a unique QR code for each posted item that links directly to the item detail page. Finders can print and attach it to the item physically.
+
+Use qrcode npm package server-side to generate QR on item creation
+Store QR code image in Cloudinary alongside item images
+Show downloadable QR on item detail page
+QR scan opens the item detail even without auth (public read-only view)
+
+Feature G: Leaderboard & Social Proof
+The README marks this as 'Coming Soon.' Implement the leaderboard page:
+
+GET /api/leaderboard — top 50 users by points, cached 10 min in Redis
+Weekly/monthly/all-time tabs
+User cards with rank badge, username, avatar, point count, items returned
+'Your rank' section at the bottom showing where you stand even if not top 50
+
+Feature H: Item Expiry & Auto-Archiving
+Unclaimed items older than 30 days should be auto-archived to keep the map clean:
+
+Add a cron job using node-cron that runs nightly at 2 AM
+Items older than 30 days with status 'found' are moved to 'archived'
+Email notification sent to finder 3 days before archival
+Archived items removed from map but remain searchable in history
+
+3.3 Wave 3 — Strategic Features (6-10 Weeks)
+
+Feature
+Description
+Key Benefit
+Social Auth (Google/Apple)
+OAuth 2.0 via Passport.js — reduces registration friction
+40%+ signup lift
+Multilingual Support (i18n)
+react-i18next with Hindi, English, Marathi for India-first rollout
+Wider adoption
+Item Insurance Integration
+Partner with insurers for lost item recovery incentives
+Monetization
+WhatsApp Alerts
+Twilio WhatsApp API for item match and claim alerts
+High engagement
+Community Zones
+User-drawn polygon areas for hyperlocal neighborhoods
+Community building
+Verified Returns Counter
+Public city-level stats widget embeddable on city portals
+Trust signal
+
+4. Production Hardening — Complete Checklist
+
+4.1 Security Layer
+
+Item
+Package / Config
+Priority
+Helmet.js security headers
+npm install helmet — add app.use(helmet()) in index.ts
+CRITICAL
+Rate limiting
+npm install express-rate-limit — 100 req/15min global, 5 req/min on auth
+CRITICAL
+Input validation
+npm install zod — validate all request bodies with Zod schemas
+CRITICAL
+CORS hardening
+Whitelist only production domain in cors() options, not '*'
+CRITICAL
+Remove JWT from URL params
+Never pass token in query string — headers only
+CRITICAL
+Refresh tokens
+Implement refresh + access token pair, 15min access / 7day refresh TTL
+HIGH
+File upload validation
+Validate MIME type server-side, not just extension; max 5MB limit
+HIGH
+MongoDB injection protection
+Use express-mongo-sanitize to strip $, . from inputs
+HIGH
+XSS protection
+Use xss-clean middleware to sanitize user input
+HIGH
+HTTP Parameter Pollution
+Use hpp package to prevent parameter pollution
+MEDIUM
+
+4.2 Error Handling & Logging
+Replace scattered try/catch blocks with a centralized error handling architecture:
+
+// server/src/middlewares/errorHandler.ts
+import { Request, Response, NextFunction } from 'express';
+import logger from '../config/logger';
+
+export class AppError extends Error {
+  statusCode: number;
+  isOperational: boolean;
+  constructor(message: string, statusCode: number) {
+    super(message);
+    this.statusCode = statusCode;
+    this.isOperational = true;
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
+export const globalErrorHandler = (err: AppError, req: Request, res: Response, next: NextFunction) => {
+  const statusCode = err.statusCode || 500;
+  logger.error({ message: err.message, stack: err.stack, url: req.url });
+  res.status(statusCode).json({
+    status: 'error',
+    message: process.env.NODE_ENV === 'production' ? 'Something went wrong' : err.message
+  });
+};
+
+// server/src/config/logger.ts — Winston setup
+import winston from 'winston';
+export default winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
+  transports: [
+    new winston.transports.Console(),
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'logs/combined.log' }),
+  ],
+});
+
+4.3 Health Check & Monitoring Endpoints
+
+// GET /api/health — liveness probe
+router.get('/health', async (req, res) => {
+  const mongoOK = mongoose.connection.readyState === 1;
+  const redisOK = redis.status === 'ready';
+  const status = mongoOK && redisOK ? 200 : 503;
+  res.status(status).json({
+    status: status === 200 ? 'healthy' : 'degraded',
+    mongo: mongoOK ? 'up' : 'down',
+    redis: redisOK ? 'up' : 'down',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+4.4 Environment Variables — Complete Production .env
+
+# server/.env.production
+NODE_ENV=production
+PORT=5000
+MONGO_URI=mongodb+srv://...
+JWT_SECRET=<256-bit-random-secret>
+JWT_REFRESH_SECRET=<different-256-bit-secret>
+JWT_ACCESS_EXPIRES=15m
+JWT_REFRESH_EXPIRES=7d
+REDIS_HOST=your-redis-host
+REDIS_PORT=6379
+REDIS_PASSWORD=your-redis-password
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+MAPBOX_TOKEN=sk.xxx   (server-side only)
+SMTP_HOST=smtp.gmail.com
+SMTP_USER=noreply@relto.app
+SMTP_PASS=...
+OPENAI_API_KEY=sk-...  (for AI matching)
+CORS_ORIGIN=https://relto-eta.vercel.app
+SENTRY_DSN=https://...@sentry.io/...
+LOG_LEVEL=warn
+
+NEVER commit .env files.
+Add .env, .env.local, .env.production to .gitignore immediately. Use GitHub Secrets or Vercel Environment Variables for CI/CD.
+
+4.5 Docker & Docker Compose Setup
+Containerize the entire application for reproducible deployments:
+
+# docker-compose.yml
+version: '3.9'
+services:
+  server:
+    build: ./server
+    ports: ['5000:5000']
+    env_file: ./server/.env.production
+    depends_on: [mongo, redis]
+    restart: unless-stopped
+  client:
+    build: ./client
+    ports: ['80:80']
+    env_file: ./client/.env.production
+    depends_on: [server]
+  mongo:
+    image: mongo:7
+    volumes: ['mongo_data:/data/db']
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes: ['redis_data:/data']
+volumes:
+  mongo_data:
+  redis_data:
+
+4.6 CI/CD Pipeline (GitHub Actions)
+
+# .github/workflows/deploy.yml
+name: Deploy RELTO
+on:
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: cd server && npm ci && npm test
+      - run: cd client && npm ci && npm run build
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          script: cd /app/relto && git pull && docker-compose up -d --build
+
+5. Master SOP — Agent / Integrator Task List
+This section is the complete handoff document for your agent or developer. Each task is atomic, testable, and sequenced with dependencies.
+
+Instructions for Agent:
+Complete tasks in the order listed. Each task must pass its acceptance criteria before proceeding. Do NOT skip tasks marked CRITICAL. For tasks involving secrets or .env, do not hardcode values — always use environment variables.
+
+Phase 0: Foundations (Day 1-2) — Do First
+
+#
+Task
+Files to Modify
+Acceptance Criteria
+Priority
+0.1
+Add .gitignore entries for all .env files and /logs directory
+.gitignore
+git status shows no .env tracked
+CRITICAL
+0.2
+Replace all console.log with Winston logger
+server/src/**
+Zero console.log in codebase
+CRITICAL
+0.3
+Add Helmet.js middleware
+server/src/index.ts
+Response has X-Frame-Options header
+CRITICAL
+0.4
+Add express-rate-limit on all routes
+server/src/index.ts
+429 returned after 100 req/15min
+CRITICAL
+0.5
+Add express-mongo-sanitize and xss-clean
+server/src/index.ts
+$ in query param returns 400
+CRITICAL
+0.6
+Harden CORS to only allow production domain
+server/src/index.ts
+CORS blocks requests from unknown origins
+CRITICAL
+0.7
+Add Zod validation schemas for all route bodies
+server/src/schemas/
+Invalid body returns 400 with error message
+HIGH
+0.8
+Implement centralized globalErrorHandler
+server/src/middlewares/errorHandler.ts
+Unhandled error returns JSON, not HTML stack trace
+HIGH
+
+Phase 1: Caching (Day 3-5) — Redis Layer
+
+#
+Task
+Files to Modify
+Acceptance Criteria
+Priority
+1.1
+Install and configure ioredis, create config/redis.ts
+server/src/config/redis.ts
+redis.ping() returns PONG on startup
+CRITICAL
+1.2
+Create getOrSet and invalidate cache utility
+server/src/utils/cache.ts
+Unit test: second call returns cached value without DB query
+CRITICAL
+1.3
+Apply caching to GET /api/items
+itemController.ts
+Second identical request takes <5ms (was 80-200ms)
+CRITICAL
+1.4
+Apply caching to GET /api/items/nearby
+itemController.ts
+Same lat/lng returns cached result for 3 min
+CRITICAL
+1.5
+Apply caching to GET /api/items/:id
+itemController.ts
+Item detail cached 10 min, bust on update/delete
+HIGH
+1.6
+Cache leaderboard endpoint
+userController.ts
+Leaderboard served from Redis, 10 min TTL
+HIGH
+1.7
+Add cache invalidation on all mutating operations
+All controllers
+POST /items clears items:* keys in Redis
+HIGH
+1.8
+Add MongoDB compound indexes (see Section 2.7)
+All Mongoose models
+Run explain() — no COLLSCAN on main queries
+HIGH
+1.9
+Install TanStack Query, create queryClient.ts, wrap App
+client/src/
+DevTools shows query cache working
+HIGH
+1.10
+Convert all Axios calls to useQuery/useMutation hooks
+client/src/hooks/
+Network tab shows zero duplicate requests on re-renders
+MEDIUM
+
+Phase 2: Real-Time & Core Features (Day 6-12)
+
+#
+Task
+Files to Modify
+Acceptance Criteria
+Priority
+2.1
+Install Socket.IO, attach to HTTP server with JWT auth middleware
+server/src/socket/index.ts
+Client can connect with valid JWT; invalid JWT rejected
+HIGH
+2.2
+Implement new_message socket event, replace polling in chat
+server/src/socket/events.ts, client/src/features/chat/
+Message appears in <500ms without page refresh
+HIGH
+2.3
+Implement item_claimed and item_resolved socket events
+socket events + itemController
+Finder sees real-time notification when item claimed
+HIGH
+2.4
+Create Zustand notificationStore with unread count badge
+client/src/store/notifications.ts
+Bell icon shows unread count, clears on view
+HIGH
+2.5
+Add /api/health endpoint
+server/src/routes/health.ts
+Returns 200 with mongo/redis status JSON
+HIGH
+2.6
+Implement GET /api/leaderboard — top 50 by points
+server/src/routes/leaderboard.ts
+Returns sorted user list with rank, cached in Redis
+MEDIUM
+2.7
+Build leaderboard page in frontend
+client/src/pages/Leaderboard.tsx
+Shows top users with rank badges, links to profiles
+MEDIUM
+2.8
+Add MongoDB text index and search endpoint
+Item model, server/src/routes/items.ts
+GET /api/items?q=wallet returns text-matched results
+MEDIUM
+2.9
+Build advanced filter panel in item listing
+client/src/features/items/FilterPanel.tsx
+Filter by category + date range + radius works end-to-end
+MEDIUM
+2.10
+Add node-cron job for item auto-archival (30 days)
+server/src/jobs/archiveItems.ts
+Test: item with 31-day-old date moved to archived status
+MEDIUM
+
+Phase 3: AI Matching Feature (Day 13-18)
+
+#
+Task
+Files to Modify
+Acceptance Criteria
+Priority
+3.1
+Add OPENAI_API_KEY to .env and create openai client config
+server/src/config/openai.ts
+openai.models.list() returns without error
+HIGH
+3.2
+Add embedding vector field to Item schema (Float32Array, 1536 dim)
+server/src/models/Item.ts
+Item document saves with embedding field
+HIGH
+3.3
+Create matchingService.ts — generate embedding on item create
+server/src/services/matchingService.ts
+New item gets embedding vector persisted to DB
+HIGH
+3.4
+Implement cosine similarity search across opposite-type items
+matchingService.ts
+Returns top 3 matching items by similarity score
+HIGH
+3.5
+Trigger match search async after item creation (non-blocking)
+itemController.ts
+Item creation API responds in <500ms regardless of matching
+HIGH
+3.6
+Send in-app notification for matches via Socket.IO
+socket events + matchingService
+User sees 'Possible match found!' notification instantly
+HIGH
+3.7
+Build 'Potential Matches' card on item detail page
+client/src/features/items/ItemDetail.tsx
+Shows matched items with similarity %, click navigates to match
+MEDIUM
+
+Phase 4: DevOps & Launch Prep (Day 19-25)
+
+#
+Task
+Files to Modify
+Acceptance Criteria
+Priority
+4.1
+Write Dockerfile for server (Node 20 alpine)
+server/Dockerfile
+docker build && docker run starts server on port 5000
+HIGH
+4.2
+Write Dockerfile for client (Nginx serving Vite build)
+client/Dockerfile
+docker build && docker run serves React app on port 80
+HIGH
+4.3
+Write docker-compose.yml with server, client, mongo, redis
+docker-compose.yml
+docker-compose up starts all 4 services; app works end-to-end
+HIGH
+4.4
+Set up GitHub Actions CI pipeline (test + build)
+.github/workflows/ci.yml
+PR fails CI if build or tests fail
+HIGH
+4.5
+Install Sentry SDK for frontend and backend error tracking
+client + server
+Sentry dashboard shows events on forced error
+HIGH
+4.6
+Add .env.example files to both client and server
+.env.example
+New dev can onboard using example file with clear comments
+MEDIUM
+4.7
+Write API documentation with all endpoints, params, responses
+docs/API.md
+All 15+ endpoints documented with example request/response
+MEDIUM
+4.8
+Add integration tests for critical paths
+server/src/__tests__/
+Auth, item CRUD, and claim flow all have passing tests
+MEDIUM
+4.9
+PWA setup with vite-plugin-pwa — manifest + service worker
+client/vite.config.ts
+Lighthouse PWA score 90+; app installable on mobile
+MEDIUM
+4.10
+Performance audit: Lighthouse score on map page
+client/src/
+LCP < 2.5s, FID < 100ms, CLS < 0.1 on production build
+MEDIUM
+
+6. Technical Debt — Things to Remove or Fix
+
+The following items should be cleaned up alongside the above features. They are exclusions — things that should NOT remain in the production codebase:
+
+Issue
+What to Remove/Fix
+Why
+Hardcoded URLs
+Remove any hardcoded localhost:5000 — use VITE_API_BASE_URL env var everywhere
+Breaks production builds
+Missing error boundaries
+Wrap all major route components in React ErrorBoundary — currently crashes propagate to blank screen
+UX failure
+No loading skeletons on map
+Map currently shows blank during load — add skeleton/spinner state
+Perceived performance
+JWT in localStorage
+If using localStorage for JWT — move to httpOnly cookie or at minimum add secure flag checks
+XSS vulnerability
+Multer temp files
+Ensure multer temp files are deleted after Cloudinary upload — memory/disk leak
+Server resource leak
+Missing pagination on messages
+GET /conversations/:id/messages has no pagination — loads all messages at once
+Performance bomb
+No request timeout
+Express routes have no timeout — a slow DB query holds a connection indefinitely
+Reliability
+Missing image compression
+Cloudinary upload should specify quality: 'auto', format: 'webp' transformation
+Bandwidth cost
+No test coverage
+Zero tests currently — add minimum coverage for auth, items, and gamification logic
+Regression risk
+
+7. Recommended Package Additions Summary
+
+Package
+Where
+Purpose
+Install Command
+ioredis
+Server
+Redis client — production-grade
+npm i ioredis
+@tanstack/react-query
+Client
+Client-side cache & server state
+npm i @tanstack/react-query
+socket.io + socket.io-client
+Both
+Real-time WebSocket events
+npm i socket.io / socket.io-client
+zod
+Server
+Runtime request validation
+npm i zod
+helmet
+Server
+Security headers
+npm i helmet
+express-rate-limit
+Server
+API rate limiting
+npm i express-rate-limit
+express-mongo-sanitize
+Server
+Prevent NoSQL injection
+npm i express-mongo-sanitize
+xss-clean
+Server
+XSS protection middleware
+npm i xss-clean
+hpp
+Server
+HTTP parameter pollution
+npm i hpp
+winston
+Server
+Production-grade logging
+npm i winston
+node-cron
+Server
+Scheduled jobs (archival)
+npm i node-cron
+openai
+Server
+AI matching embeddings
+npm i openai
+@sentry/react + @sentry/node
+Both
+Error monitoring
+npm i @sentry/react @sentry/node
+vite-plugin-pwa
+Client
+PWA + service worker
+npm i -D vite-plugin-pwa
+qrcode
+Server
+QR code generation
+npm i qrcode
+
+8. Suggested Timeline (1 Developer / 1 AI Agent)
+
+Phase
+Work
+Duration
+Outcome
+Phase 0
+Security & foundations hardening
+2 days
+Production-safe baseline
+Phase 1
+Redis caching + MongoDB indexes + React Query
+3 days
+3-5x API performance improvement
+Phase 2
+Socket.IO + Leaderboard + Search + Auto-archive
+7 days
+Feature-complete v2.0
+Phase 3
+AI matching engine
+6 days
+Killer differentiator live
+Phase 4
+Docker, CI/CD, monitoring, PWA, tests
+7 days
+Market-ready, deployable
+Total
+
+25 days
+Production-ready RELTO v2.0
+
+Final Note:
+RELTO already has the hardest part done — a working product with real functionality, clean architecture, and a compelling use case. The improvements in this SOP are refinements, not rebuilds. Each phase independently adds measurable value. Ship Phase 0 + Phase 1 first and you will already have a significantly more stable and performant application.
+
+— End of Document —

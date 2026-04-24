@@ -12,6 +12,7 @@ type MapState = {
   bearing: number;
   selectedItemId: string | null;
   postingLocation: { lat: number; lng: number } | null;
+  searchLocation: { lat: number; lng: number; radius?: number } | null;
   animationComplete: boolean;
   mapStyle: MapStyleType;
   lightPreset: LightPreset;
@@ -23,6 +24,7 @@ type MapState = {
   setBearing: (bearing: number) => void;
   selectItem: (id: string | null) => void;
   setPostingLocation: (lat: number, lng: number) => void;
+  setSearchLocation: (lat: number | null, lng: number | null, radius?: number) => void;
   clearPostingLocation: () => void;
   setAnimationComplete: (complete: boolean) => void;
   toggleMapStyle: () => void;
@@ -39,6 +41,7 @@ export const useMapStore = create<MapState>((set) => ({
   bearing: -17.6,
   selectedItemId: null,
   postingLocation: null,
+  searchLocation: null,
   animationComplete: false,
   mapStyle: 'standard',
   lightPreset: 'night',
@@ -51,6 +54,7 @@ export const useMapStore = create<MapState>((set) => ({
   setBearing: (bearing) => set({ bearing }),
   selectItem: (id) => set({ selectedItemId: id, animationComplete: false }),
   setPostingLocation: (lat, lng) => set({ postingLocation: { lat, lng } }),
+  setSearchLocation: (lat, lng, radius) => set({ searchLocation: lat !== null && lng !== null ? { lat, lng, radius } : null }),
   clearPostingLocation: () => set({ postingLocation: null }),
   setAnimationComplete: (complete) => set({ animationComplete: complete }),
   toggleMapStyle: () => set((state) => ({ mapStyle: state.mapStyle === 'standard' ? 'satellite' : 'standard' })),

@@ -4,6 +4,7 @@ import Item from '../models/Item';
 import User from '../models/User';
 import cloudinary from '../config/cloudinary';
 import { POINTS, calculateLevel } from '../utils/gamification';
+import { getOrSetCache, invalidateCache } from '../utils/cache';
 
 export const createItem = async (req: Request, res: Response) => {
   const {
@@ -68,17 +69,21 @@ export const createItem = async (req: Request, res: Response) => {
 
   await item.populate('owner', 'name');
 
+  await invalidateCache('items:*');
+
   res.status(201).json(item);
 };
 
 
 export const getAllItems = async (req: Request, res: Response) => {
   try {
-    const items = await Item.find({
-      isResolved: false,
-    })
-      .populate('owner', 'name')
-      .populate('claimer', 'name');
+    const items = await getOrSetCache('items:all', async () => {
+      return await Item.find({
+        isResolved: false,
+      })
+        .populate('owner', 'name')
+        .populate('claimer', 'name');
+    }, 300); // cache for 5 minutes
 
     res.json(items);
   } catch (error) {
@@ -93,20 +98,23 @@ export const getNearbyItems = async (req: Request, res: Response) => {
     return res.status(400).json({ message: 'Latitude and longitude required' });
   }
 
-  const items = await Item.find({
-    isResolved: false,
-    location: {
-      $near: {
-        $geometry: {
-          type: 'Point',
-          coordinates: [Number(lng), Number(lat)],
+  const cacheKey = `items:nearby:${lat}:${lng}:${radius}`;
+  const items = await getOrSetCache(cacheKey, async () => {
+    return await Item.find({
+      isResolved: false,
+      location: {
+        $near: {
+          $geometry: {
+            type: 'Point',
+            coordinates: [Number(lng), Number(lat)],
+          },
+          $maxDistance: Number(radius),
         },
-        $maxDistance: Number(radius),
       },
-    },
-  })
-    .populate('owner', 'name')
-    .populate('claimer', 'name');
+    })
+      .populate('owner', 'name')
+      .populate('claimer', 'name');
+  }, 300);
 
   res.status(200).json(items);
 };
@@ -118,9 +126,11 @@ export const getItemById = async (req: Request, res: Response) => {
     return res.status(400).json({ message: 'Invalid item ID format' });
   }
 
-  const item = await Item.findById(id)
-    .populate('owner', 'name')
-    .populate('claimer', 'name');
+  const item = await getOrSetCache(`items:${id}`, async () => {
+    return await Item.findById(id)
+      .populate('owner', 'name')
+      .populate('claimer', 'name');
+  }, 300);
 
   if (!item) {
     return res.status(404).json({ message: 'Item not found' });
@@ -172,6 +182,8 @@ export const resolveItem = async (req: Request, res: Response) => {
     }
   }
 
+  await invalidateCache('items:*');
+
   res.status(200).json({ message: 'Item resolved' });
 };
 
@@ -194,6 +206,8 @@ export const deleteItem = async (req: Request, res: Response) => {
   }
 
   await Item.findByIdAndDelete(id);
+
+  await invalidateCache('items:*');
 
   res.status(200).json({ message: 'Item deleted successfully' });
 };
@@ -237,6 +251,8 @@ export const claimItem = async (req: Request, res: Response) => {
 
   await item.populate('claimer', 'name');
 
+  await invalidateCache('items:*');
+
   res.status(200).json(item);
 };
 
@@ -273,25 +289,31 @@ export const getHistory = async (req: Request, res: Response) => {
     const sort: any = {};
     sort[sortBy as string] = sortOrder === 'asc' ? 1 : -1;
 
-    const items = await Item.find(query)
-      .populate('owner', 'name email')
-      .populate('claimer', 'name email')
-      .populate('resolvedBy', 'name')
-      .sort(sort)
-      .skip(skip)
-      .limit(Number(limit));
+    const cacheKey = `items:history:${search || ''}:${category || ''}:${type || ''}:${page}:${limit}:${sortBy}:${sortOrder}`;
+    
+    const result = await getOrSetCache(cacheKey, async () => {
+      const items = await Item.find(query)
+        .populate('owner', 'name email')
+        .populate('claimer', 'name email')
+        .populate('resolvedBy', 'name')
+        .sort(sort)
+        .skip(skip)
+        .limit(Number(limit));
 
-    const total = await Item.countDocuments(query);
+      const total = await Item.countDocuments(query);
+      
+      return {
+        items,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          pages: Math.ceil(total / Number(limit)),
+        },
+      };
+    }, 600); // 10 minutes cache for history
 
-    res.status(200).json({
-      items,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        pages: Math.ceil(total / Number(limit)),
-      },
-    });
+    res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
@@ -304,10 +326,12 @@ export const getHistoryItem = async (req: Request, res: Response) => {
     return res.status(400).json({ message: 'Invalid item ID format' });
   }
 
-  const item = await Item.findById(id)
-    .populate('owner', 'name email')
-    .populate('claimer', 'name email')
-    .populate('resolvedBy', 'name');
+  const item = await getOrSetCache(`items:history:${id}`, async () => {
+    return await Item.findById(id)
+      .populate('owner', 'name email')
+      .populate('claimer', 'name email')
+      .populate('resolvedBy', 'name');
+  }, 600);
 
   if (!item) {
     return res.status(404).json({ message: 'Item not found' });

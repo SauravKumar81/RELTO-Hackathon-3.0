@@ -3,7 +3,7 @@ import { Locate } from 'lucide-react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useEffect, useRef, useMemo, useState } from 'react';
 import { useMapStore } from '../../store/map.store';
-import { useItemStore } from '../../store/item.store';
+import { useNearbyItems } from '../../hooks/useItems';
 import { ItemMarker } from './ItemMarker';
 import { UserMarker } from './UserMarker';
 
@@ -21,12 +21,14 @@ export const MapView = () => {
     setPitch,
     setBearing,
     selectedItemId, 
+    searchLocation,
+    setSearchLocation,
     setAnimationComplete, 
     mapStyle,
     lightPreset,
     show3dObjects
   } = useMapStore();
-  const { items, fetchNearby } = useItemStore();
+  const { data: items = [] } = useNearbyItems(searchLocation?.lat || 0, searchLocation?.lng || 0, 5000, !!searchLocation);
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
   const mapRef = useRef<any>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -112,10 +114,10 @@ export const MapView = () => {
   }, [mapStyle]);
 
   useEffect(() => {
-    if (latitude && longitude) {
-      fetchNearby(latitude, longitude, 5000);
+    if (latitude && longitude && !searchLocation) {
+      setSearchLocation(latitude, longitude);
     }
-  }, [latitude, longitude, fetchNearby]);
+  }, [latitude, longitude, searchLocation, setSearchLocation]);
 
   useEffect(() => {
     if (selectedItemId && mapRef.current) {
@@ -153,7 +155,7 @@ export const MapView = () => {
     }
 
     debounceTimer.current = setTimeout(() => {
-      fetchNearby(newLat, newLng, 5000);
+      setSearchLocation(newLat, newLng);
     }, 1000);
   };
 

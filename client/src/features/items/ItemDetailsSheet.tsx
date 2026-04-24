@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Sheet } from '../../components/ui/Sheet';
 import { Button } from '../../components/ui/Button';
-import { useItemStore } from '../../store/item.store';
 import { useMapStore } from '../../store/map.store';
+import { useItemById, useResolveItem } from '../../hooks/useItems';
 import { useAuthStore } from '../../store/auth.store';
 import { useChatStore } from '../../store/chat.store';
 import { getCategoryConfig } from '../../types/categories';
@@ -13,12 +13,11 @@ import { StartChatModal } from '../chat/StartChatModal';
 import { ChatSheet } from '../chat/ChatSheet';
 
 export const ItemDetailsSheet = () => {
-  const item = useItemStore((s) => s.activeItem);
-  const fetchItem = useItemStore((s) => s.fetchItem);
-  const clearActiveItem = useItemStore((s) => s.clearActiveItem);
-  const resolve = useItemStore((s) => s.markResolved);
-  const loading = useItemStore((s) => s.loading);
   const selectedItemId = useMapStore((s) => s.selectedItemId);
+  const { data: item, isLoading: isFetchingItem } = useItemById(selectedItemId || '', !!selectedItemId);
+  
+  const resolveMutation = useResolveItem();
+  
   const animationComplete = useMapStore((s) => s.animationComplete);
   const selectItem = useMapStore((s) => s.selectItem);
   const currentUser = useAuthStore((s) => s.user);
@@ -34,13 +33,7 @@ export const ItemDetailsSheet = () => {
   const [showChat, setShowChat] = useState(false);
   const [startingChat, setStartingChat] = useState(false);
 
-  useEffect(() => {
-    if (selectedItemId) {
-      fetchItem(selectedItemId);
-    } else {
-      clearActiveItem();
-    }
-  }, [selectedItemId, fetchItem, clearActiveItem]);
+  // React Query handles fetching automatically when selectedItemId changes
 
   useEffect(() => {
     if (item && currentUser && item.owner._id === currentUser._id) {
@@ -60,8 +53,9 @@ export const ItemDetailsSheet = () => {
   };
 
   const handleResolve = async () => {
+    if (!item) return;
     try {
-      await resolve(item._id);
+      await resolveMutation.mutateAsync(item._id);
       toast.success('Item marked as returned! Great job!');
       selectItem(null);
     } catch (error: any) {
@@ -261,9 +255,9 @@ export const ItemDetailsSheet = () => {
             <Button
               onClick={handleResolve}
               className="w-full bg-green-600 hover:bg-green-700 flex items-center justify-center gap-2"
-              disabled={loading}
+              disabled={resolveMutation.isPending}
             >
-              {loading ? 'Confirming...' : (
+              {resolveMutation.isPending ? 'Confirming...' : (
                 <>
                   <Check size={16} />
                   Mark as Resolved

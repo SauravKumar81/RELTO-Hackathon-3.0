@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import logger from '../config/logger';
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -24,7 +25,7 @@ export const sendNotificationEmail = async (params: NotificationEmailParams): Pr
   const { to, subject, posterName, claimantName, itemTitle, itemType, initialMessage } = params;
 
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    console.log('[Email] SMTP not configured, skipping email notification');
+    logger.warn('[Email] SMTP not configured, skipping email notification');
     return;
   }
 
@@ -125,6 +126,6 @@ This is an automated message from Lost & Found.
       html,
     });
   } catch (error) {
-    console.error('[Email] Failed to send notification:', error);
+    logger.error('[Email] Failed to send notification:', error);
   }
 };

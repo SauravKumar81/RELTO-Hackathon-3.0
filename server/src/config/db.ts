@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import logger from './logger';
 
 const connectDB = async () => {
   try {
@@ -6,9 +7,9 @@ const connectDB = async () => {
       throw new Error('MONGO_URI is not defined');
     }
     const conn = await mongoose.connect(process.env.MONGO_URI);
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
+    logger.info(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
-    console.error(`Error: ${(error as Error).message}`);
+    logger.error(`Error: ${(error as Error).message}`);
     process.exit(1);
   }
 };

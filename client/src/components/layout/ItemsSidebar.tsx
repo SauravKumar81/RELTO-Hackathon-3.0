@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useItemStore } from '../../store/item.store';
 import { useMapStore } from '../../store/map.store';
+import { useNearbyItems, useResolveItem, useDeleteItem } from '../../hooks/useItems';
 import { useAuthStore } from '../../store/auth.store';
 import { useChatStore } from '../../store/chat.store';
 import type { Item } from '../../types/item';
@@ -23,7 +23,13 @@ interface ItemsSidebarProps {
 }
 
 export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSidebarProps) => {
-  const allItems = useItemStore((s) => s.items);
+  const searchLocation = useMapStore((s) => s.searchLocation);
+  const { data: allItems = [] } = useNearbyItems(
+    searchLocation?.lat || 0,
+    searchLocation?.lng || 0,
+    searchLocation?.radius || 0,
+    !!searchLocation
+  );
   
   const items = allItems.filter((item: Item) => {
     if (!searchQuery) return true;
@@ -38,9 +44,9 @@ export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSi
   });
   const { selectedItemId, selectItem } = useMapStore();
   const currentUser = useAuthStore((s) => s.user);
-  const resolveItem = useItemStore((s) => s.markResolved);
-  const deleteItem = useItemStore((s) => s.deleteItem);
   
+  const resolveMutation = useResolveItem();
+  const deleteMutation = useDeleteItem();
   const startConversation = useChatStore((s) => s.startConversation);
   const conversations = useChatStore((s) => s.conversations);
   const fetchConversationsForItem = useChatStore((s) => s.fetchConversationsForItem);
@@ -112,9 +118,9 @@ export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSi
   const handleResolve = async (itemId: string) => {
     setIsResolving(true);
     try {
-      await resolveItem(itemId);
-      toast.success('Item marked as resolved! 🎉');
-      
+      await resolveMutation.mutateAsync(itemId);
+      // Confetti and toast are handled in onSuccess or here. 
+      // Toast is handled in mutation onSuccess. Let's keep confetti here.
       confetti({
         particleCount: 100,
         spread: 70,
@@ -133,7 +139,7 @@ export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSi
 
       selectItem(null);
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to resolve item');
+      // Mutation handles error toast
     } finally {
         setIsResolving(false);
     }
@@ -147,12 +153,11 @@ export const ItemsSidebar = ({ searchQuery, isMobile = false, onClose }: ItemsSi
     if (!deleteConfirmation.itemId) return;
     
     try {
-      await deleteItem(deleteConfirmation.itemId);
-      toast.success('Post deleted successfully');
+      await deleteMutation.mutateAsync(deleteConfirmation.itemId);
       selectItem(null);
       setDeleteConfirmation({ isOpen: false, itemId: null });
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to delete post');
+      // Mutation handles error toast
     }
   };
 

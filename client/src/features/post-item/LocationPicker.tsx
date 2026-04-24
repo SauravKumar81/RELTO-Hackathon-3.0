@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import Map, { Marker } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Button } from '../../components/ui/Button';
-import { useItemStore } from '../../store/item.store';
 import { useMapStore } from '../../store/map.store';
+import { useCreateItem } from '../../hooks/useItems';
 import { MapPin, Upload, Image as ImageIcon, X } from 'lucide-react';
 
 type Props = {
@@ -25,8 +25,7 @@ export const LocationPicker = ({
   onClose,
   onBack,
 }: Props) => {
-  const addItem = useItemStore((s) => s.addItem);
-  const loading = useItemStore((s) => s.loading);
+  const createItemMutation = useCreateItem();
   const { latitude, longitude, accuracy, postingLocation, setPostingLocation } =
     useMapStore();
   const [file, setFile] = useState<File | null>(null);
@@ -92,7 +91,7 @@ export const LocationPicker = ({
       submitFormData.append('expiresAt', formData.expiresAt);
       if (file) submitFormData.append('image', file);
 
-      await addItem(submitFormData);
+      await createItemMutation.mutateAsync(submitFormData);
       useMapStore.getState().clearPostingLocation();
       onClose();
     } catch (error: any) {
@@ -249,9 +248,9 @@ export const LocationPicker = ({
         <Button
           onClick={submit}
           className="flex-1 shadow-lg shadow-cyan-900/20"
-          disabled={loading || !mapLat || !mapLng}
+          disabled={createItemMutation.isPending || !mapLat || !mapLng}
         >
-          {loading ? 'Posting...' : 'Post Item'}
+          {createItemMutation.isPending ? 'Posting...' : 'Post Item'}
         </Button>
       </div>
     </div>

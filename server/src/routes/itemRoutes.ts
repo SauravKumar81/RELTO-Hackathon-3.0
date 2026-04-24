@@ -12,6 +12,8 @@ import {
 } from '../controllers/itemController';
 import { protect } from '../middlewares/authMiddleware';
 import upload from '../middlewares/upload.middleware';
+import { validateRequest } from '../middlewares/validateRequest';
+import { createItemSchema } from '../schemas/itemSchema';
 
 
 const router = Router();
@@ -20,7 +22,7 @@ router.get('/history', getHistory);
 router.get('/history/:id', getHistoryItem);
 
 router.get('/', getAllItems);
-router.post('/', protect, upload.single('image'), createItem);
+router.post('/', protect, upload.single('image'), validateRequest(createItemSchema), createItem);
 router.get('/nearby', getNearbyItems);
 router.get('/:id', getItemById);
 router.patch('/:id/claim', protect, claimItem);
