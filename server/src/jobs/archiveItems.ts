@@ -9,13 +9,18 @@ cron.schedule('0 0 * * *', async () => {
     logger.info('Running daily archive job...');
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     
-    // Delete items older than 30 days
-    const result = await Item.deleteMany({
-      createdAt: { $lt: thirtyDaysAgo }
-    });
+    // Archive 'found' items older than 30 days
+    const result = await Item.updateMany(
+      {
+        type: 'found',
+        createdAt: { $lt: thirtyDaysAgo },
+        status: 'active'
+      },
+      { $set: { status: 'archived' } }
+    );
     
-    if (result.deletedCount > 0) {
-      logger.info(`Archived (deleted) ${result.deletedCount} old items.`);
+    if (result.modifiedCount > 0) {
+      logger.info(`Archived ${result.modifiedCount} old items.`);
       await invalidate('items:*');
     } else {
       logger.info('No items to archive.');

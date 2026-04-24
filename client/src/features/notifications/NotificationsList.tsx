@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, X, Check, Trash2, Info, MessageCircle, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useNotificationStore } from '../../store/notifications.store';
 import { formatDistanceToNow } from '../../utils/dateUtils';
-import { useNavigate } from 'react-router-dom';
+
 
 type NotificationsListProps = {
   open: boolean;
@@ -11,7 +11,6 @@ type NotificationsListProps = {
 
 export const NotificationsList = ({ open, onClose }: NotificationsListProps) => {
   const { notifications, markAsRead, markAllAsRead, clearNotifications } = useNotificationStore();
-  const navigate = useNavigate();
 
   const getIconForType = (type: string) => {
     switch (type) {

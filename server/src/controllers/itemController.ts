@@ -83,7 +83,7 @@ export const getAllItems = async (req: Request, res: Response) => {
     const cacheKey = `items:all:${q || ''}:${category || ''}:${type || ''}:${urgency || ''}`;
     
     const items = await getOrSet(cacheKey, async () => {
-      const query: any = { isResolved: false };
+      const query: any = { isResolved: false, status: 'active' };
 
       if (q) {
         query.$text = { $search: q as string };
@@ -124,6 +124,7 @@ export const getNearbyItems = async (req: Request, res: Response) => {
   const items = await getOrSet(cacheKey, async () => {
     const query: any = {
       isResolved: false,
+      status: 'active',
       location: {
         $near: {
           $geometry: {

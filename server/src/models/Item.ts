@@ -18,6 +18,7 @@ export interface IItem extends Document {
   resolvedAt?: Date;
   resolvedBy?: Types.ObjectId;
   expiresAt: Date;
+  status: 'active' | 'archived';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -88,6 +89,11 @@ const ItemSchema: Schema<IItem> = new Schema(
     expiresAt: {
       type: Date,
       required: true,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'archived'],
+      default: 'active',
     },
   },
   {

@@ -10,6 +10,7 @@ import userRoutes from './routes/userRoutes';
 import itemRoutes from './routes/itemRoutes';
 import conversationRoutes from './routes/conversationRoutes';
 import reportRoutes from './routes/reportRoutes';
+import healthRoutes from './routes/health';
 import { globalErrorHandler } from './middlewares/errorHandler';
 
 const app = express();
@@ -53,9 +54,7 @@ app.use('/api/items', itemRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/reports', reportRoutes);
 
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+app.use('/api/health', healthRoutes);
 
 app.use(globalErrorHandler);
 
