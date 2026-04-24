@@ -9,10 +9,13 @@ export const createItem = async (formData: FormData) => {
 export const getNearbyItems = async (
   lat: number,
   lng: number,
-  radius: number
+  radius: number,
+  q?: string,
+  category?: string,
+  type?: string
 ) => {
   const { data } = await api.get<Item[]>('/api/items/nearby', {
-    params: { lat, lng, radius },
+    params: { lat, lng, radius, q, category, type },
   });
   return data;
 };

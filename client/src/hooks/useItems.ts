@@ -13,10 +13,18 @@ import { useAuthStore } from '../store/auth.store';
 import { checkLevelUp, getRankTitle, POINTS } from '../utils/gamification';
 import toast from 'react-hot-toast';
 
-export const useNearbyItems = (lat: number, lng: number, radius: number, enabled: boolean = true) => {
+export const useNearbyItems = (
+  lat: number, 
+  lng: number, 
+  radius: number, 
+  q?: string,
+  category?: string,
+  type?: string,
+  enabled: boolean = true
+) => {
   return useQuery({
-    queryKey: ['items', 'nearby', lat, lng, radius],
-    queryFn: () => getNearbyItems(lat, lng, radius),
+    queryKey: ['items', 'nearby', lat, lng, radius, q, category, type],
+    queryFn: () => getNearbyItems(lat, lng, radius, q, category, type),
     enabled: enabled && !!lat && !!lng,
   });
 };

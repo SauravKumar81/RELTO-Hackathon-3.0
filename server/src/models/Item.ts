@@ -96,6 +96,7 @@ const ItemSchema: Schema<IItem> = new Schema(
 );
 
 ItemSchema.index({ location: '2dsphere' });
+ItemSchema.index({ title: 'text', description: 'text' });
 
 const Item = mongoose.model<IItem>('Item', ItemSchema);
 

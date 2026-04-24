@@ -78,10 +78,27 @@ export const createItem = async (req: Request, res: Response) => {
 
 export const getAllItems = async (req: Request, res: Response) => {
   try {
-    const items = await getOrSet('items:all', async () => {
-      return await Item.find({
-        isResolved: false,
-      })
+    const { q, category, type } = req.query;
+
+    const cacheKey = `items:all:${q || ''}:${category || ''}:${type || ''}`;
+    
+    const items = await getOrSet(cacheKey, async () => {
+      const query: any = { isResolved: false };
+
+      if (q) {
+        query.$text = { $search: q as string };
+      }
+
+      if (category) {
+        const categories = (category as string).split(',');
+        query.category = { $in: categories };
+      }
+
+      if (type && ['lost', 'found'].includes(type as string)) {
+        query.type = type;
+      }
+
+      return await Item.find(query)
         .populate('owner', 'name')
         .populate('claimer', 'name');
     }, 300); // cache for 5 minutes
@@ -93,15 +110,15 @@ export const getAllItems = async (req: Request, res: Response) => {
 };
 
 export const getNearbyItems = async (req: Request, res: Response) => {
-  const { lat, lng, radius = 2000 } = req.query;
+  const { lat, lng, radius = 2000, q, category, type } = req.query;
 
   if (!lat || !lng) {
     return res.status(400).json({ message: 'Latitude and longitude required' });
   }
 
-  const cacheKey = `items:nearby:${lat}:${lng}:${radius}`;
+  const cacheKey = `items:nearby:${lat}:${lng}:${radius}:${q || ''}:${category || ''}:${type || ''}`;
   const items = await getOrSet(cacheKey, async () => {
-    return await Item.find({
+    const query: any = {
       isResolved: false,
       location: {
         $near: {
@@ -112,7 +129,22 @@ export const getNearbyItems = async (req: Request, res: Response) => {
           $maxDistance: Number(radius),
         },
       },
-    })
+    };
+
+    if (q) {
+      query.$text = { $search: q as string };
+    }
+
+    if (category) {
+      const categories = (category as string).split(',');
+      query.category = { $in: categories };
+    }
+
+    if (type && ['lost', 'found'].includes(type as string)) {
+      query.type = type;
+    }
+
+    return await Item.find(query)
       .populate('owner', 'name')
       .populate('claimer', 'name');
   }, 300);
