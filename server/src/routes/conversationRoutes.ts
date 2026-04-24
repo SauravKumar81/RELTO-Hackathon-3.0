@@ -11,6 +11,8 @@ import {
   getUnreadCount,
 } from '../controllers/conversationController';
 import { protect } from '../middlewares/authMiddleware';
+import { validateRequest } from '../middlewares/validateRequest';
+import { startConversationSchema, sendMessageSchema } from '../schemas/conversationSchema';
 
 const router = Router();
 
@@ -20,7 +22,7 @@ router.get('/unread-count', getUnreadCount);
 
 router.get('/', getMyConversations);
 
-router.post('/', startConversation);
+router.post('/', validateRequest(startConversationSchema), startConversation);
 
 router.get('/item/:itemId', getConversationsForItem);
 
@@ -28,7 +30,7 @@ router.get('/:id', getConversationById);
 
 router.get('/:id/messages', getMessages);
 
-router.post('/:id/messages', sendMessage);
+router.post('/:id/messages', validateRequest(sendMessageSchema), sendMessage);
 
 router.patch('/:id/close', closeConversation);
 

@@ -1,5 +1,5 @@
 import { redis } from '../config/redis';
-import { logger } from '../utils/logger';
+import logger from '../config/logger';
 
 const DEFAULT_EXPIRATION = 300; // 5 minutes in seconds
 
