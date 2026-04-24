@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { MapView } from '../features/map/MapView';
 import { PostItemModal } from '../features/post-item/PostItemModal';
 import { ItemsSidebar } from '../components/layout/ItemsSidebar';
 import { useAuthStore } from '../store/auth.store';
 import { useMapStore } from '../store/map.store';
 import { useChatStore } from '../store/chat.store';
+import { useNotificationStore } from '../store/notifications.store';
 import { Button } from '../components/ui/Button';
 import { UserStatsBadge } from '../components/feedback/UserStatsBadge';
 import { ConversationsList } from '../features/chat/ConversationsList';
 import { ChatSheet } from '../features/chat/ChatSheet';
-import { LogOut, Search, MessageCircle, Sun, Moon, Sunrise, Sunset, Menu, X, List, History as HistoryIcon, Pin, PinOff, ChevronLeft, Globe, Filter } from 'lucide-react';
+import { LogOut, Search, MessageCircle, Sun, Moon, Sunrise, Sunset, Menu, X, List, History as HistoryIcon, Pin, PinOff, ChevronLeft, Globe, Filter, Bell } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useDebounce } from '../hooks/useDebounce';
 import { FilterPanel } from '../features/items/FilterPanel';
@@ -27,20 +28,33 @@ export const MapPage = () => {
   const selectedItemId = useMapStore((s) => s.selectedItemId);
   const unreadCount = useChatStore((s) => s.unreadCount);
   const fetchUnreadCount = useChatStore((s) => s.fetchUnreadCount);
-  const [searchQuery, setSearchQuery] = useState('');
+  const unreadNotifications = useNotificationStore((s) => s.unreadCount);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchQuery = searchParams.get('q') || '';
+  const category = searchParams.get('category') || '';
+  const type = searchParams.get('type') || '';
+  const urgency = searchParams.get('urgency') === 'true';
+
   const [showMessages, setShowMessages] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
-  
-  // Filtering state
-  const [category, setCategory] = useState('');
-  const [type, setType] = useState('');
-  const [urgency, setUrgency] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+  const updateFilters = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '' || value === 'false') {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    setSearchParams(newParams);
+  };
 
   useEffect(() => {
     if (!isMobile && isPinned) {
@@ -121,7 +135,7 @@ export const MapPage = () => {
                   type="text"
                   placeholder="Search nearby items..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => updateFilters({ q: e.target.value })}
                   className="w-full bg-transparent border-none text-white placeholder-gray-500 focus:ring-0 text-sm h-10 px-3 outline-none"
                 />
                 <button
@@ -135,9 +149,9 @@ export const MapPage = () => {
                     category={category}
                     type={type}
                     urgency={urgency}
-                    onCategoryChange={setCategory}
-                    onTypeChange={setType}
-                    onUrgencyChange={setUrgency}
+                    onCategoryChange={(val) => updateFilters({ category: val })}
+                    onTypeChange={(val) => updateFilters({ type: val })}
+                    onUrgencyChange={(val) => updateFilters({ urgency: val ? 'true' : null })}
                   />
                 )}
               </div>
@@ -164,18 +178,34 @@ export const MapPage = () => {
                  
                  {token ? (
                     <div className="flex items-center gap-2 pl-1">
-                      <button 
-                        onClick={() => setShowMessages(true)}
-                        className="relative p-2.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-all group"
-                      >
-                        <MessageCircle size={20} className="group-hover:scale-110 transition-transform" />
-                        {unreadCount > 0 && (
-                          <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
-                          </span>
-                        )}
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button 
+                          className="relative p-2.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-all group"
+                          title="Notifications"
+                        >
+                          <Bell size={20} className="group-hover:scale-110 transition-transform" />
+                          {unreadNotifications > 0 && (
+                            <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
+                            </span>
+                          )}
+                        </button>
+                        
+                        <button 
+                          onClick={() => setShowMessages(true)}
+                          className="relative p-2.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-all group"
+                          title="Messages"
+                        >
+                          <MessageCircle size={20} className="group-hover:scale-110 transition-transform" />
+                          {unreadCount > 0 && (
+                            <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
+                            </span>
+                          )}
+                        </button>
+                      </div>
                       
                       <div className="flex items-center gap-3 border-l border-white/10 pl-3">
                         {user && <UserStatsBadge user={user} onClick={() => navigate('/profile')} />}
@@ -237,7 +267,7 @@ export const MapPage = () => {
                         type="text"
                         placeholder="Search..."
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) => updateFilters({ q: e.target.value })}
                         className="bg-transparent border-none text-white focus:ring-0 text-sm w-full outline-none"
                       />
                    </div>
