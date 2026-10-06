@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Send, ArrowLeft, MoreVertical, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
+import { X, Send, ArrowLeft, MoreVertical, AlertTriangle, CheckCircle, Wifi, WifiOff } from 'lucide-react';
 import { useChatStore } from '../../store/chat.store';
 import { useAuthStore } from '../../store/auth.store';
 import { formatDistanceToNow } from '../../utils/dateUtils';
@@ -23,32 +23,50 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [isLive, setIsLive] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const lastMessageCountRef = useRef(0);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startPolling = useCallback((convId: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        await fetchMessages(convId);
+        setIsLive(true);
+      } catch {
+        setIsLive(false);
+      }
+    }, 2000);
+  }, [fetchMessages]);
 
   useEffect(() => {
     if (open && conversation) {
       fetchMessages(conversation._id);
-      const interval = setInterval(() => {
-        fetchMessages(conversation._id);
-      }, 2000);
-      return () => clearInterval(interval);
+      startPolling(conversation._id);
+    } else {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
     }
-  }, [open, conversation, fetchMessages]);
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [open, conversation?._id]);
 
+  // Auto-scroll only when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messages.length > lastMessageCountRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      lastMessageCountRef.current = messages.length;
+    }
   }, [messages]);
 
-  const [refreshing, setRefreshing] = useState(false);
-
-  const handleRefresh = async () => {
-    if (!conversation) return;
-    setRefreshing(true);
-    await fetchMessages(conversation._id);
-    setTimeout(() => setRefreshing(false), 500); // Minimum spin time
-  };
-  
   if (!conversation || !currentUser) return null;
 
   const isPoster = conversation.poster._id === currentUser._id;
@@ -59,12 +77,16 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
     const textToSend = newMessage.trim();
     if (!textToSend || sending || !isActive) return;
     
+    // Clear input immediately for better UX
     setNewMessage('');
     setSending(true);
+    
     try {
       await sendMessage(conversation._id, textToSend);
+      // fetchMessages is called inside sendMessage; also re-fetch to ensure latest
       await fetchMessages(conversation._id);
     } catch {
+      // Restore message if send failed
       setNewMessage(textToSend);
     } finally {
       setSending(false);
@@ -124,6 +146,7 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
           exit={{ x: '100%' }}
           transition={{ ease: 'circOut', duration: 0.3 }}
         >
+          {/* Header */}
           <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
             <div className="flex items-center gap-3">
               <button
@@ -133,21 +156,29 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
                 <ArrowLeft size={20} />
               </button>
               <div>
-                <h2 className="font-bold text-white tracking-wide">{otherUser.name}</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-bold text-white tracking-wide">{otherUser.name}</h2>
+                  {/* Live indicator */}
+                  <div className="flex items-center gap-1">
+                    {isLive ? (
+                      <>
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                        </span>
+                        <Wifi size={10} className="text-green-400" />
+                      </>
+                    ) : (
+                      <WifiOff size={10} className="text-red-400" />
+                    )}
+                  </div>
+                </div>
                 <p className="text-xs text-gray-400 truncate max-w-[200px]">
                   {conversation.item.title}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={handleRefresh}
-                className="p-2 rounded-lg hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
-                title="Refresh messages"
-                disabled={refreshing}
-              >
-                <RefreshCw size={20} className={refreshing ? "animate-spin" : ""} />
-              </button>
               {getStatusBadge()}
               {isActive && (
                 <div className="relative">
@@ -180,6 +211,7 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
             </div>
           </div>
 
+          {/* Item info */}
           <div className="px-4 py-3 bg-white/5 border-b border-white/5">
             <div className="flex items-center gap-3">
               {conversation.item.imageUrl && (
@@ -206,6 +238,7 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
             </div>
           </div>
 
+          {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-black/20">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
@@ -247,6 +280,7 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Input */}
           {isActive ? (
             <div className="p-4 border-t border-white/10 bg-glass-surface">
               <div className="flex items-end gap-2">
@@ -265,7 +299,11 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
                   disabled={!newMessage.trim() || sending}
                   className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-cyan-900/20"
                 >
-                  <Send size={20} />
+                  {sending ? (
+                    <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Send size={20} />
+                  )}
                 </button>
               </div>
             </div>
