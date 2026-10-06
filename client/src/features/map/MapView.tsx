@@ -1,11 +1,19 @@
 import Map, { Source, Layer, NavigationControl } from 'react-map-gl';
 import { Locate } from 'lucide-react';
+import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { useEffect, useRef, useMemo, useState } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { useMapStore } from '../../store/map.store';
 import { useItemStore } from '../../store/item.store';
 import { ItemMarker } from './ItemMarker';
 import { UserMarker } from './UserMarker';
+
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || '';
+try {
+  if (MAPBOX_TOKEN) {
+    mapboxgl.accessToken = MAPBOX_TOKEN;
+  }
+} catch (e) {}
 
 export const MapView = () => {
   const { 
@@ -22,15 +30,11 @@ export const MapView = () => {
     setBearing,
     selectedItemId, 
     setAnimationComplete, 
-    mapStyle,
-    lightPreset,
-    show3dObjects
+    mapStyle
   } = useMapStore();
   const { items, fetchNearby } = useItemStore();
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
   const mapRef = useRef<any>(null);
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [isStyleLoaded, setIsStyleLoaded] = useState(false);
   const watchIdRef = useRef<number | null>(null);
 
   const geojsonData = useMemo(() => ({
@@ -82,21 +86,39 @@ export const MapView = () => {
     };
   }, [latitude, longitude, accuracy]);
 
+  const hasPannedToUserRef = useRef(false);
+
   useEffect(() => {
+    if (!navigator.geolocation) {
+      return;
+    }
+    
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
-        setLocation(pos.coords.latitude, pos.coords.longitude);
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setLocation(lat, lng);
         setAccuracy(pos.coords.accuracy);
-        setLocationError(null);
+
+        if (!hasPannedToUserRef.current && mapRef.current) {
+          hasPannedToUserRef.current = true;
+          try {
+            mapRef.current.getMap()?.flyTo({
+              center: [lng, lat],
+              zoom: 15.5,
+              duration: 1500,
+              essential: true
+            });
+          } catch (e) {}
+        }
       },
       (error) => {
-        console.error('Geolocation error:', error);
-        setLocationError('Unable to get your location. Please enable location services.');
+        console.warn('Geolocation error:', error);
       },
       {
         enableHighAccuracy: true,
-        timeout: 30000,
-        maximumAge: 5000
+        timeout: 15000,
+        maximumAge: 10000
       }
     );
 
@@ -105,11 +127,7 @@ export const MapView = () => {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-  }, [setLocation]);
-
-  useEffect(() => {
-    setIsStyleLoaded(false);
-  }, [mapStyle]);
+  }, [setLocation, setAccuracy]);
 
   useEffect(() => {
     if (latitude && longitude) {
@@ -157,87 +175,12 @@ export const MapView = () => {
     }, 1000);
   };
 
-  const handleMapLoad = (e: any) => {
-    const map = e.target;
-    setIsStyleLoaded(true);
-    
-    map.setFog({
-      color: 'rgb(186, 210, 235)',
-      'high-color': 'rgb(36, 92, 223)',
-      'horizon-blend': 0.02,
-      'space-color': 'rgb(11, 11, 25)',
-      'star-intensity': 0.6
-    });
-
-    if (!map.getSource('mapbox-dem')) {
-      map.addSource('mapbox-dem', {
-        type: 'raster-dem',
-        url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-        tileSize: 512,
-        maxzoom: 14
-      });
-    }
-    
-    map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
-
-    try {
-      map.setConfigProperty('basemap', 'lightPreset', lightPreset);
-      map.setConfigProperty('basemap', 'show3dObjects', show3dObjects);
-    } catch (err) {}
-  };
-
-  useEffect(() => {
-    if (mapRef.current) {
-      const map = mapRef.current.getMap();
-      if (map && map.isStyleLoaded()) {
-        try {
-          map.setConfigProperty('basemap', 'lightPreset', lightPreset);
-        } catch (err) {}
-      }
-    }
-  }, [lightPreset]);
-
-  useEffect(() => {
-    if (mapRef.current) {
-      const map = mapRef.current.getMap();
-      if (map && map.isStyleLoaded()) {
-        try {
-          map.setConfigProperty('basemap', 'show3dObjects', show3dObjects);
-        } catch (err) {}
-      }
-    }
-  }, [show3dObjects]);
-
-  if (locationError) {
-    return (
-      <div className="h-full w-full flex items-center justify-center bg-slate-100">
-        <div className="text-center p-6">
-          <p className="text-red-600 mb-2">{locationError}</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (latitude === null || longitude === null) {
-    return (
-      <div className="h-full w-full flex items-center justify-center bg-slate-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-3"></div>
-          <p className="text-slate-600">Getting your location...</p>
-        </div>
-      </div>
-    );
-  }
+  const currentLat = latitude ?? 28.6139;
+  const currentLng = longitude ?? 77.2090;
 
   const styleUrl = mapStyle === 'satellite' 
-    ? 'mapbox://styles/mapbox/standard-satellite' 
-    : 'mapbox://styles/mapbox/standard';
+    ? 'mapbox://styles/mapbox/satellite-streets-v12' 
+    : 'mapbox://styles/mapbox/dark-v11';
 
   const clusterLayer: any = {
     id: 'clusters',
@@ -290,34 +233,41 @@ export const MapView = () => {
   const handleClusterClick = (e: any) => {
     const feature = e.features[0];
     const clusterId = feature.properties.cluster_id;
-    const mapboxSource = mapRef.current?.getMap().getSource('items');
+    const mapboxSource = mapRef.current?.getMap()?.getSource('items');
 
-    mapboxSource.getClusterExpansionZoom(clusterId, (err: any, zoom: number) => {
-      if (err) return;
+    if (mapboxSource) {
+      mapboxSource.getClusterExpansionZoom(clusterId, (err: any, zoom: number) => {
+        if (err) return;
 
-      mapRef.current?.getMap().easeTo({
-        center: feature.geometry.coordinates,
-        zoom,
-        duration: 500,
+        mapRef.current?.getMap().easeTo({
+          center: feature.geometry.coordinates,
+          zoom,
+          duration: 500,
+        });
       });
-    });
+    }
   };
+
+  const emptyGeojson = useMemo(() => ({
+    type: 'FeatureCollection',
+    features: []
+  }), []);
 
   return (
     <Map
       key={mapStyle}
       ref={mapRef}
-      mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+      mapboxAccessToken={MAPBOX_TOKEN}
       initialViewState={{
-        latitude,
-        longitude,
+        latitude: currentLat,
+        longitude: currentLng,
         zoom,
         pitch,
         bearing,
       }}
       mapStyle={styleUrl}
+      style={{ width: '100%', height: '100%' }}
       onMove={handleMapMove}
-      onLoad={handleMapLoad}
       collectResourceTiming={false}
       interactiveLayerIds={['clusters', 'unclustered-point']}
       onClick={(e) => {
@@ -333,7 +283,6 @@ export const MapView = () => {
           }
         }
       }}
-      projection={{ name: 'globe' }}
       maxPitch={85}
       antialias={true}
     >
@@ -358,54 +307,48 @@ export const MapView = () => {
         <Locate size={24} className="group-hover:scale-110 transition-transform" />
       </button>
       
-      {isStyleLoaded && accuracyCircleData && (
-        <Source
-          id="accuracy-circle"
-          type="geojson"
-          data={accuracyCircleData as any}
-        >
-          <Layer
-            id="accuracy-circle-fill"
-            type="fill"
-            paint={{
-              'fill-color': '#3b82f6',
-              'fill-opacity': 0.15,
-            }}
-          />
-          <Layer
-            id="accuracy-circle-outline"
-            type="line"
-            paint={{
-              'line-color': '#3b82f6',
-              'line-width': 1.5,
-              'line-opacity': 0.4,
-            }}
-          />
-        </Source>
-      )}
+      <Source
+        id="accuracy-circle"
+        type="geojson"
+        data={(accuracyCircleData || emptyGeojson) as any}
+      >
+        <Layer
+          id="accuracy-circle-fill"
+          type="fill"
+          paint={{
+            'fill-color': '#3b82f6',
+            'fill-opacity': 0.15,
+          }}
+        />
+        <Layer
+          id="accuracy-circle-outline"
+          type="line"
+          paint={{
+            'line-color': '#3b82f6',
+            'line-width': 1.5,
+            'line-opacity': 0.4,
+          }}
+        />
+      </Source>
       
-      <UserMarker lat={latitude} lng={longitude} accuracy={accuracy} />
+      <UserMarker lat={currentLat} lng={currentLng} accuracy={accuracy} />
 
-      {isStyleLoaded && (
-        <Source
-          id="items"
-          type="geojson"
-          data={geojsonData as any}
-          cluster={true}
-          clusterMaxZoom={14}
-          clusterRadius={50}
-        >
-          <Layer {...clusterLayer} />
-          <Layer {...clusterCountLayer} />
-          <Layer {...unclusteredPointLayer} />
-        </Source>
-      )}
+      <Source
+        id="items"
+        type="geojson"
+        data={(geojsonData || emptyGeojson) as any}
+        cluster={true}
+        clusterMaxZoom={14}
+        clusterRadius={50}
+      >
+        <Layer {...clusterLayer} />
+        <Layer {...clusterCountLayer} />
+        <Layer {...unclusteredPointLayer} />
+      </Source>
 
-      {isStyleLoaded && zoom > 15 && items.map((item) => (
+      {zoom > 15 && items.map((item) => (
         <ItemMarker key={item._id} item={item} />
       ))}
     </Map>
   );
 };
-
-

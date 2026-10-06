@@ -29,6 +29,10 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
   useEffect(() => {
     if (open && conversation) {
       fetchMessages(conversation._id);
+      const interval = setInterval(() => {
+        fetchMessages(conversation._id);
+      }, 2000);
+      return () => clearInterval(interval);
     }
   }, [open, conversation, fetchMessages]);
 
@@ -52,16 +56,19 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
   const isActive = conversation.status === 'active';
 
   const handleSend = async () => {
-    if (!newMessage.trim() || sending || !isActive) return;
+    const textToSend = newMessage.trim();
+    if (!textToSend || sending || !isActive) return;
     
+    setNewMessage('');
     setSending(true);
     try {
-      await sendMessage(conversation._id, newMessage.trim());
-      setNewMessage('');
-      inputRef.current?.focus();
+      await sendMessage(conversation._id, textToSend);
+      await fetchMessages(conversation._id);
     } catch {
+      setNewMessage(textToSend);
     } finally {
       setSending(false);
+      inputRef.current?.focus();
     }
   };
 
@@ -210,7 +217,8 @@ export const ChatSheet = ({ open, conversation, onClose }: ChatSheetProps) => {
               </div>
             ) : (
               messages.map((msg) => {
-                const isOwn = msg.sender._id === currentUser._id;
+                const senderId = typeof msg.sender === 'object' ? msg.sender?._id : msg.sender;
+                const isOwn = senderId === currentUser._id;
                 return (
                   <div
                     key={msg._id}

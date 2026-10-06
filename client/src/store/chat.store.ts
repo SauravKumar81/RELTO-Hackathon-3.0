@@ -104,9 +104,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sendMessage: async (conversationId, content) => {
     try {
       const message = await chatService.sendMessage(conversationId, content);
-      set((state) => ({
-        messages: [...state.messages, message],
-      }));
+      
+      await get().fetchMessages(conversationId);
 
       set((state) => ({
         conversations: state.conversations.map((conv) =>

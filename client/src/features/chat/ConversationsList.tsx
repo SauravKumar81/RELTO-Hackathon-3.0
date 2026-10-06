@@ -24,6 +24,10 @@ export const ConversationsList = ({ open, onClose }: ConversationsListProps) => 
   useEffect(() => {
     if (open) {
       fetchConversations(filter === 'all' ? undefined : 'active');
+      const interval = setInterval(() => {
+        fetchConversations(filter === 'all' ? undefined : 'active');
+      }, 3000);
+      return () => clearInterval(interval);
     }
   }, [open, filter, fetchConversations]);
 

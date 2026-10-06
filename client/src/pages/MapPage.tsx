@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapView } from '../features/map/MapView';
+import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { PostItemModal } from '../features/post-item/PostItemModal';
 import { ItemsSidebar } from '../components/layout/ItemsSidebar';
 import { useAuthStore } from '../store/auth.store';
@@ -52,7 +53,7 @@ export const MapPage = () => {
   useEffect(() => {
     if (token) {
       fetchUnreadCount();
-      const interval = setInterval(fetchUnreadCount, 30000);
+      const interval = setInterval(fetchUnreadCount, 4000);
       return () => clearInterval(interval);
     }
   }, [token, fetchUnreadCount]);
@@ -78,7 +79,9 @@ export const MapPage = () => {
   return (
     <div className="relative h-screen w-full bg-[#050505] overflow-hidden font-sans selection:bg-cyan-500/30">
       <div className="absolute inset-0 z-0">
-        <MapView />
+        <ErrorBoundary>
+          <MapView />
+        </ErrorBoundary>
       </div>
 
       <header className="hidden md:flex absolute top-4 left-4 right-4 z-20 justify-between items-start pointer-events-none">

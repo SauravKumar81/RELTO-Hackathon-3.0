@@ -31,8 +31,8 @@ type MapState = {
 };
 
 export const useMapStore = create<MapState>((set) => ({
-  latitude: null,
-  longitude: null,
+  latitude: 28.6139,
+  longitude: 77.2090,
   accuracy: null,
   zoom: 15.5,
   pitch: 45,
