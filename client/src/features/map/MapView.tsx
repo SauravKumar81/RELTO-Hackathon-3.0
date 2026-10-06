@@ -182,6 +182,67 @@ export const MapView = () => {
     ? 'mapbox://styles/mapbox/satellite-streets-v12' 
     : 'mapbox://styles/mapbox/dark-v11';
 
+  // 3D buildings layer — extrudes real-world building footprints with dark/neon styling
+  const buildingsLayer: any = {
+    id: '3d-buildings',
+    source: 'composite',
+    'source-layer': 'building',
+    filter: ['==', 'extrude', 'true'],
+    type: 'fill-extrusion',
+    minzoom: 14,
+    paint: {
+      // Dark graphite/obsidian base
+      'fill-extrusion-color': [
+        'interpolate',
+        ['linear'],
+        ['get', 'height'],
+        0,   '#0a0a0f',
+        20,  '#0d0d14',
+        60,  '#111118',
+        150, '#141420',
+      ],
+      // Extrude to real building height (meters)
+      'fill-extrusion-height': [
+        'interpolate', ['linear'], ['zoom'],
+        14, 0,
+        14.5, ['get', 'height']
+      ],
+      // Ground floor fades out so ground plane stays visible
+      'fill-extrusion-base': [
+        'interpolate', ['linear'], ['zoom'],
+        14, 0,
+        14.5, ['get', 'min_height']
+      ],
+      'fill-extrusion-opacity': 0.92,
+      // Subtle cyan ambient occlusion on edges (Mapbox GL v3+ only, ignored otherwise)
+      'fill-extrusion-emissive-strength': 0.08,
+    },
+  };
+
+  // Thin cyan outline that traces building tops — gives neon city edge glow
+  const buildingOutlineLayer: any = {
+    id: '3d-buildings-outline',
+    source: 'composite',
+    'source-layer': 'building',
+    filter: ['==', 'extrude', 'true'],
+    type: 'fill-extrusion',
+    minzoom: 15,
+    paint: {
+      'fill-extrusion-color': '#1a3a4a',
+      'fill-extrusion-height': [
+        'interpolate', ['linear'], ['zoom'],
+        15, 0,
+        15.5, ['+', ['get', 'height'], 0.4]
+      ],
+      'fill-extrusion-base': [
+        'interpolate', ['linear'], ['zoom'],
+        15, 0,
+        15.5, ['get', 'height']
+      ],
+      'fill-extrusion-opacity': 0.35,
+    },
+  };
+
   const clusterLayer: any = {
     id: 'clusters',
     type: 'circle' as const,
@@ -307,6 +368,14 @@ export const MapView = () => {
         <Locate size={24} className="group-hover:scale-110 transition-transform" />
       </button>
       
+      {/* 3D buildings — rendered from Mapbox composite building layer */}
+      {mapStyle !== 'satellite' && (
+        <>
+          <Layer {...buildingsLayer} />
+          <Layer {...buildingOutlineLayer} />
+        </>
+      )}
+
       <Source
         id="accuracy-circle"
         type="geojson"
