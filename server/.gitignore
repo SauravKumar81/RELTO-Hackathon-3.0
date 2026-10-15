@@ -5,3 +5,4 @@ logs/
 *.log
 
 firebase-service-account.json
+.vercel
